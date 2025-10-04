@@ -8,7 +8,8 @@ def _list_profiles(device):
     for s in device.sensors:
         for p in s.profiles:
             vs = p.as_video_stream_profile()
-            if not vs: continue
+            if not vs: 
+                continue
             entry = (vs.stream_type(), vs.width(), vs.height(), vs.fps(), vs.format())
             if vs.stream_type() == rs.stream.color:
                 out["color"].append(entry)
@@ -25,9 +26,14 @@ def _has_profile(profiles, stream, w, h, fps, fmt):
 class RealSenseIO:
     def __init__(self, width, height, fps, depth_width, depth_height, depth_fps,
                  use_auto_exposure=True, exposure=100):
-        self.width=width; self.height=height; self.fps=fps
-        self.depth_width=depth_width; self.depth_height=depth_height; self.depth_fps=depth_fps
-        self.use_auto_exposure=use_auto_exposure; self.exposure=exposure
+        self.width=width
+        self.height=height
+        self.fps=fps
+        self.depth_width=depth_width
+        self.depth_height=depth_height
+        self.depth_fps=depth_fps
+        self.use_auto_exposure=use_auto_exposure
+        self.exposure=exposure
         self.pipeline = rs.pipeline()
         self.align = rs.align(rs.stream.color)
         self.profile = None
@@ -38,7 +44,8 @@ class RealSenseIO:
             raise RuntimeError("No RealSense device found.")
         dev = ctx.devices[0]
         profiles = _list_profiles(dev)
-        COLOR_FMT = rs.format.bgr8; DEPTH_FMT = rs.format.z16
+        COLOR_FMT = rs.format.bgr8
+        DEPTH_FMT = rs.format.z16
         want_color=(rs.stream.color, self.width, self.height, self.fps, COLOR_FMT)
         want_depth=(rs.stream.depth, self.depth_width, self.depth_height, self.depth_fps, DEPTH_FMT)
         fallback_color=(rs.stream.color, 640,480,30,COLOR_FMT)
@@ -70,8 +77,10 @@ class RealSenseIO:
         time.sleep(0.2)
 
     def stop(self):
-        try: self.pipeline.stop()
-        except Exception: pass
+        try: 
+            self.pipeline.stop()
+        except Exception: 
+            pass
 
     def get_aligned(self)->Tuple[np.ndarray, np.ndarray, float]:
         frames = self.pipeline.wait_for_frames()
@@ -79,13 +88,15 @@ class RealSenseIO:
         color = frames.get_color_frame()
         depth = frames.get_depth_frame()
         t = time.monotonic()
-        if not color or not depth: return None, None, t
+        if not color or not depth: 
+            return None, None, t
         return np.asanyarray(color.get_data()), np.asanyarray(depth.get_data()), t
 
     def get_intrinsics(self)->Dict[str,Any]:
         color_stream = self.profile.get_stream(rs.stream.color).as_video_stream_profile()
         depth_stream = self.profile.get_stream(rs.stream.depth).as_video_stream_profile()
-        c = color_stream.get_intrinsics(); d = depth_stream.get_intrinsics()
+        c = color_stream.get_intrinsics()
+        d = depth_stream.get_intrinsics()
         ext = depth_stream.get_extrinsics_to(color_stream)
         return {
             "color_intrinsics": dict(width=c.width,height=c.height,ppx=c.ppx,ppy=c.ppy,fx=c.fx,fy=c.fy,model=str(c.model),coeffs=list(c.coeffs)),

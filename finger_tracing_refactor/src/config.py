@@ -78,5 +78,4 @@ class AppConfig:
             color=ColorCfg(**d.get("color",{})),
             experiment=ExperimentCfg(**d.get("experiment",{})),
             show_live_preview=bool(d.get("show_live_preview", True)),
-        
         )

@@ -21,14 +21,18 @@ class DwellDetector:
         st = self.state
         if not st.recording:
             if dist_to_start <= start_r + hyst:
-                if st.start_enter_time is None: st.start_enter_time = t_now
+                if st.start_enter_time is None: 
+                    st.start_enter_time = t_now
                 elif (t_now - st.start_enter_time) >= start_sec:
-                    st.armed = True; st.recording = True
+                    st.armed = True
+                    st.recording = True
             else:
-                st.start_enter_time = None; st.armed = False
+                st.start_enter_time = None
+                st.armed = False
         else:
             if dist_to_end <= end_r + hyst:
-                if st.end_enter_time is None: st.end_enter_time = t_now
+                if st.end_enter_time is None: 
+                    st.end_enter_time = t_now
                 elif (t_now - st.end_enter_time) >= stop_sec:
                     st.end_detected = True
             else:
