@@ -18,8 +18,8 @@ def draw_paths_overlay(width:int, height:int, spiral_pts:np.ndarray,
             cv2.polylines(canvas, [p], False, color, 3, cv2.LINE_AA)
             cv2.circle(canvas, tuple(p[0,0]), 5, color, -1)
             cv2.circle(canvas, tuple(p[-1,0]), 5, color, -1)
-    _poly(path_mp,  (60, 90, 255))   # blue-ish
-    _poly(path_hsv, (60, 60, 220))   # red-ish
+    _poly(path_mp,  (255, 0, 0))   # bgr order
+    _poly(path_hsv, (0, 0, 225))   # red-ish
     cv2.putText(canvas, "MediaPipe (blue) / HSV (red)", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 2, cv2.LINE_AA)
     cv2.imwrite(out_path, canvas)
 

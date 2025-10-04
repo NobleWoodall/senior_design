@@ -9,8 +9,10 @@ def summarize_errors(times, errs, depths, valid_mask):
                 "err_px":{"mean":None,"median":None,"std":None,"p90":None,"p95":None,"max":None},
                 "rmse_time_weighted":None,"tracking_loss_rate":1.0,
                 "mean_depth_mm":None,"valid_depth_fraction_avg":None}
-    duration = max(0.0, t[-1]-t[0]); fps = (t.size/duration) if duration>0 else 0.0
-    v = np.isfinite(e); e_v = e[v]
+    duration = max(0.0, t[-1]-t[0])
+    fps = (t.size/duration) if duration>0 else 0.0
+    v = np.isfinite(e)
+    e_v = e[v]
     stats = {"mean": float(np.mean(e_v)) if e_v.size else None,
              "median": float(np.median(e_v)) if e_v.size else None,
              "std": float(np.std(e_v)) if e_v.size else None,
