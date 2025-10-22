@@ -3,7 +3,6 @@ Spiral Display for XReal 1 Pro Glasses
 Displays a spiral on a black background for XReal 1 Pro screen mirroring.
 Black areas will appear transparent on the glasses.
 """
-
 import cv2
 import numpy as np
 import math
