@@ -29,9 +29,6 @@ class ExperimentRunner:
         dwell = DwellDetector(self.cfg.dwell.StartRadiusPx, self.cfg.dwell.StartDwellSec,
                               self.cfg.dwell.EndRadiusPx, self.cfg.dwell.StopDwellSec, self.cfg.dwell.hysteresis_px)
 
-        # Scale factor for making spiral appear closer
-        scale_factor = 1.0
-
         times=[]
         errs=[]
         depths=[]
@@ -45,21 +42,17 @@ class ExperimentRunner:
         if color0 is None:
             raise RuntimeError("Failed to read from RealSense.")
         h,w = color0.shape[:2]
-        display_w = int(w * scale_factor)
-        display_h = int(h * scale_factor)
 
-        # Create a scaled spiral for display (makes it appear closer)
-        display_spiral = Spiral(display_w, display_h,
-                               self.cfg.spiral.a * scale_factor,
-                               self.cfg.spiral.b * scale_factor,
-                               self.cfg.spiral.turns,
-                               self.cfg.spiral.theta_step)
-        display_endpoints = display_spiral.endpoints()
-        sx_disp, sy_disp = display_endpoints["start"]
-        ex_disp, ey_disp = display_endpoints["end"]
+        # Zoom factor: higher = appears closer (like moving camera closer in Unity)
+        # 1.0 = no zoom, 2.0 = 2x zoom (appears 2x closer)
+        zoom_factor = 2.0
+
+        # Virtual depth of spiral plane (in mm) - like Unity's requiredZDistance
+        # Hand closer than this will appear in front of spiral
+        spiral_depth_mm = 500.0  # 0.5 meters
 
         if self.cfg.experiment.save_preview:
-            saver.open_video(display_w, display_h, fps)
+            saver.open_video(w, h, fps)
 
         last_xy = None
         MAX_JUMP_PX = int(self.cfg.experiment.max_jump_px)
@@ -69,9 +62,20 @@ class ExperimentRunner:
             color, depth, t_now = rsio.get_aligned()
             if color is None:
                 continue
+
             # Create black canvas for AR overlay (what will be sent to glasses)
-            view = np.zeros((display_h, display_w, 3), dtype=np.uint8)
-            display_spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
+            view = np.zeros((h, w, 3), dtype=np.uint8)
+
+            # Draw hand pixels that are closer than spiral depth (depth-based occlusion)
+            # This creates the 3D effect where hand appears in front of spiral
+            if depth is not None:
+                # Create mask for pixels closer than spiral depth
+                depth_mask = (depth > 0) & (depth < spiral_depth_mm)
+                # Copy color pixels where mask is true
+                view[depth_mask] = color[depth_mask]
+
+            # Draw spiral on top (at the virtual depth plane)
+            spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
 
             # detect (pass depth for HSV tracker, MediaPipe doesn't need it)
             if method == "hsv":
@@ -104,13 +108,9 @@ class ExperimentRunner:
                 st = dwell.update(t_now, d_start, d_end)
                 started = started or st.recording
 
-                # Scale coordinates for display
-                x_disp = int(x * scale_factor)
-                y_disp = int(y * scale_factor)
-
                 if not started:
                     draw_status(view, "standby", (128,128,128))
-                    draw_circle(view, sx_disp, sy_disp, int(self.cfg.dwell.StartRadiusPx * scale_factor), (0,255,255), 2)
+                    draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 2)
                 elif started and not st.end_detected:
                     draw_status(view, "recording", (0,220,0))
                 else:
@@ -118,14 +118,14 @@ class ExperimentRunner:
 
                 # Draw finger tracking dot with glow effect
                 dot_color = (255, 0, 255)  # Bright magenta
-                dot_radius = int(12 * scale_factor)
+                dot_radius = 12
                 # Outer glow
-                draw_circle(view, x_disp, y_disp, dot_radius + 4, dot_color, 2)
+                draw_circle(view, int(x), int(y), dot_radius + 4, dot_color, 2)
                 # Solid inner dot
-                draw_circle(view, x_disp, y_disp, dot_radius, dot_color, -1)
+                draw_circle(view, int(x), int(y), dot_radius, dot_color, -1)
                 draw_meter(view, err)
-                draw_circle(view, sx_disp, sy_disp, int(self.cfg.dwell.StartRadiusPx * scale_factor), (0,255,255), 1)
-                draw_circle(view, ex_disp, ey_disp, int(self.cfg.dwell.EndRadiusPx * scale_factor), (255,0,255), 1)
+                draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 1)
+                draw_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255,0,255), 1)
                 metronome_overlay(view, t_now, metronome_bpm)
 
                 if started and not st.end_detected:
@@ -147,11 +147,26 @@ class ExperimentRunner:
                 st = dwell.update(t_now, 1e9, 1e9)
                 if not started:
                     draw_status(view, "standby", (128,128,128))
-                    draw_circle(view, sx_disp, sy_disp, int(self.cfg.dwell.StartRadiusPx * scale_factor), (0,255,255), 2)
+                    draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 2)
                 else:
                     draw_status(view, "recording (no-track)", (0,165,255))
-                    draw_circle(view, ex_disp, ey_disp, int(self.cfg.dwell.EndRadiusPx * scale_factor), (255,0,255), 1)
+                    draw_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255,0,255), 1)
                 metronome_overlay(view, t_now, metronome_bpm)
+
+            # Apply zoom effect by cropping and resizing
+            if zoom_factor != 1.0:
+                # Calculate crop region (center crop)
+                crop_w = int(w / zoom_factor)
+                crop_h = int(h / zoom_factor)
+                start_x = (w - crop_w) // 2
+                start_y = (h - crop_h) // 2
+                end_x = start_x + crop_w
+                end_y = start_y + crop_h
+
+                # Crop the center region
+                view = view[start_y:end_y, start_x:end_x]
+                # Resize back to original size (this makes everything appear larger)
+                view = cv2.resize(view, (w, h), interpolation=cv2.INTER_LINEAR)
 
             if self.cfg.experiment.save_preview: 
                 saver.write_video_frame(view)
@@ -161,8 +176,23 @@ class ExperimentRunner:
                     cv2.namedWindow("Finger Trace", cv2.WINDOW_NORMAL)
                     cv2.setWindowProperty("Finger Trace", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
                 cv2.imshow("Finger Trace", view)
-                if (cv2.waitKey(1) & 0xFF) == 27:  # ESC
+
+                # Handle keyboard input
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27:  # ESC
                     trial_active=False
+                elif key == ord('['):  # Decrease zoom (farther away)
+                    zoom_factor = max(1.0, zoom_factor - 0.1)
+                    print(f"Zoom: {zoom_factor:.1f}x (appears {'closer' if zoom_factor > 1.0 else 'normal'})")
+                elif key == ord(']'):  # Increase zoom (closer)
+                    zoom_factor = min(4.0, zoom_factor + 0.1)
+                    print(f"Zoom: {zoom_factor:.1f}x (appears closer)")
+                elif key == ord('-') or key == ord('_'):  # Move spiral depth farther
+                    spiral_depth_mm = max(200.0, spiral_depth_mm - 50.0)
+                    print(f"Spiral depth: {spiral_depth_mm:.0f}mm ({spiral_depth_mm/1000:.2f}m)")
+                elif key == ord('=') or key == ord('+'):  # Move spiral depth closer
+                    spiral_depth_mm = min(800.0, spiral_depth_mm + 50.0)
+                    print(f"Spiral depth: {spiral_depth_mm:.0f}mm ({spiral_depth_mm/1000:.2f}m)")
 
             frame_idx += 1
 
