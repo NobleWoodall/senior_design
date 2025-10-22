@@ -12,6 +12,8 @@ class CameraCfg:
     depth_height:int=480
     depth_fps:int=30
     depth_window:int=5
+    min_depth_mm:float=200.0
+    max_depth_mm:float=600.0
 
 @dataclass
 class SpiralCfg:
@@ -48,6 +50,7 @@ class ColorCfg:
     use_flow_fallback:bool=True
     flow_win:int=15
     flow_max_level:int=2
+    use_depth_filter:bool=True
 
 @dataclass
 class ExperimentCfg:
@@ -59,6 +62,11 @@ class ExperimentCfg:
     max_jump_px:int=60
 
 @dataclass
+class TremorAnalysisCfg:
+    band_low_hz:float=4.0
+    band_high_hz:float=10.0
+
+@dataclass
 class AppConfig:
     camera:CameraCfg=field(default_factory=CameraCfg)
     spiral:SpiralCfg=field(default_factory=SpiralCfg)
@@ -66,6 +74,7 @@ class AppConfig:
     mediapipe:MPcfg=field(default_factory=MPcfg)
     color:ColorCfg=field(default_factory=ColorCfg)
     experiment:ExperimentCfg=field(default_factory=ExperimentCfg)
+    tremor_analysis:TremorAnalysisCfg=field(default_factory=TremorAnalysisCfg)
     show_live_preview:bool=True
 
     @staticmethod
@@ -77,5 +86,6 @@ class AppConfig:
             mediapipe=MPcfg(**d.get("mediapipe",{})),
             color=ColorCfg(**d.get("color",{})),
             experiment=ExperimentCfg(**d.get("experiment",{})),
+            tremor_analysis=TremorAnalysisCfg(**d.get("tremor_analysis",{})),
             show_live_preview=bool(d.get("show_live_preview", True)),
         )

@@ -14,6 +14,7 @@ from .metrics import summarize_errors
 from .viz import draw_status, draw_cross, draw_circle, draw_meter, metronome_overlay
 from .save import RunSaver
 from .signal_processing import analyze_after_runs
+from .results_display import display_results
 
 class ExperimentRunner:
     def __init__(self, cfg:AppConfig):
@@ -55,8 +56,11 @@ class ExperimentRunner:
             view = color.copy()
             spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
 
-            # detect
-            pt = tracker.track(color)
+            # detect (pass depth for HSV tracker, MediaPipe doesn't need it)
+            if method == "hsv":
+                pt = tracker.track(color, depth)
+            else:
+                pt = tracker.track(color)
 
             # jump gate BEFORE metrics
             if pt is not None:
@@ -75,7 +79,8 @@ class ExperimentRunner:
                 x,y = pt
                 xs,ys,s_sp,theta_t = spiral.nearest_point(x,y)
                 err = math.hypot(x-xs, y-ys)
-                z = median_depth_mm(depth, int(round(x)), int(round(y)), depth_win)
+                z = median_depth_mm(depth, int(round(x)), int(round(y)), depth_win,
+                                   self.cfg.camera.min_depth_mm, self.cfg.camera.max_depth_mm)
                 z_valid = float(not math.isnan(z))
                 d_start = math.hypot(x-sx, y-sy)
                 d_end   = math.hypot(x-ex, y-ey)
@@ -142,10 +147,10 @@ class ExperimentRunner:
 
         summ = summarize_errors(times, errs, depths, depth_valid_flags)
         saver.save_summary(summ)
-        path = {"xy": path_xy, "s": path_s, "err": path_err}
+        path = {"xy": path_xy, "s": path_s, "err": path_err, "times": times}
         return summ, path
 
-    def run_all(self):
+    def  run_all(self):
         cfg = self.cfg
         rsio = RealSenseIO(cfg.camera.width, cfg.camera.height, cfg.camera.fps,
                            cfg.camera.depth_width, cfg.camera.depth_height, cfg.camera.depth_fps,
@@ -159,7 +164,8 @@ class ExperimentRunner:
                                       cfg.mediapipe.tracking_confidence, cfg.mediapipe.ema_alpha)
         hsv_tracker = HSVTracker(tuple(cfg.color.hsv_low), tuple(cfg.color.hsv_high),
                                  cfg.color.morph_kernel, cfg.color.min_area,
-                                 cfg.color.use_flow_fallback, cfg.color.flow_win, cfg.color.flow_max_level)
+                                 cfg.color.use_flow_fallback, cfg.color.flow_win, cfg.color.flow_max_level,
+                                 cfg.color.use_depth_filter, cfg.camera.min_depth_mm, cfg.camera.max_depth_mm)
 
         order = cfg.experiment.methods_order
         trials = 1  # force exactly one per method
@@ -199,41 +205,46 @@ class ExperimentRunner:
             except Exception: 
                 pass
 
-        # comparison summary (averaged, though each has one)
-        def extract(summ_list, metric_key):
-            out=[] 
-            for s in summ_list:
-                if metric_key=="rmse": 
-                    out.append(s.get("rmse_time_weighted", None))
-                elif metric_key=="median": 
-                    out.append(s["err_px"]["median"] if s["err_px"]["median"] is not None else None)
-                elif metric_key=="p95": 
-                    out.append(s["err_px"]["p95"] if s["err_px"]["p95"] is not None else None)
-                elif metric_key=="loss": 
-                    out.append(s.get("tracking_loss_rate", None))
-            out=[v for v in out if v is not None]
-            return float(np.mean(out)) if out else None
-
-        comp = {
-            "mp": {"RMSE_px": extract(all_summaries["mp"], "rmse"),
-                   "median_px": extract(all_summaries["mp"], "median"),
-                   "p95_px": extract(all_summaries["mp"], "p95"),
-                   "tracking_loss_rate": extract(all_summaries["mp"], "loss")},
-            "hsv":{"RMSE_px": extract(all_summaries["hsv"], "rmse"),
-                   "median_px": extract(all_summaries["hsv"], "median"),
-                   "p95_px": extract(all_summaries["hsv"], "p95"),
-                   "tracking_loss_rate": extract(all_summaries["hsv"], "loss")}
-        }
-        with open(os.path.join(base_out, "comparison_summary.json"), "w") as f: 
-            json.dump(comp, f, indent=2)
-        print("=== Comparison (one trial each) ===")
-        for m in ["mp","hsv"]:
-            c=comp[m]
-            print(f"{m.upper():<4} | RMSE: {c['RMSE_px']:.2f}px | Median: {c['median_px']:.2f}px | P95: {c['p95_px']:.2f}px | Loss: {c['tracking_loss_rate']*100:.1f}%")
-
-        # Post-analysis: overlay & spatial PSD/RMS
+        # Post-analysis: overlay & temporal PSD/RMS with tremor band filtering
+        signal_data = {}
         try:
-            analyze_after_runs(all_paths, getattr(spiral,"curve",None), cfg.camera.width, cfg.camera.height, base_out, ds_px=2.0)
-            print("Saved: runs/paths_overlay.png, runs/signal_summary.json, runs/psd_{mp,hsv}_spatial.csv")
+            signal_data = analyze_after_runs(all_paths, getattr(spiral,"curve",None),
+                                           cfg.camera.width, cfg.camera.height, base_out,
+                                           target_fs=cfg.camera.fps,
+                                           tremor_band_low=cfg.tremor_analysis.band_low_hz,
+                                           tremor_band_high=cfg.tremor_analysis.band_high_hz)
         except Exception as e:
             print("Post-analysis failed:", e)
+
+        # Consolidated results: merge per-trial summaries, comparison metrics, and signal analysis
+        consolidated_results = {
+            "trial_summaries": {
+                "mp": all_summaries["mp"][0] if all_summaries["mp"] else {},
+                "hsv": all_summaries["hsv"][0] if all_summaries["hsv"] else {}
+            },
+            "signal_analysis": signal_data
+        }
+
+        with open(os.path.join(base_out, "results.json"), "w") as f:
+            json.dump(consolidated_results, f, indent=2)
+
+        print("\n=== Results Summary ===")
+        for m in ["mp","hsv"]:
+            if all_summaries[m]:
+                s = all_summaries[m][0]
+                rmse = s.get("rmse_time_weighted", 0)
+                median = s["err_px"].get("median", 0)
+                p95 = s["err_px"].get("p95", 0)
+                loss = s.get("tracking_loss_rate", 0)
+                print(f"{m.upper():<4} | RMSE: {rmse:.2f}px | Median: {median:.2f}px | P95: {p95:.2f}px | Loss: {loss*100:.1f}%")
+
+        print(f"\nSaved: {base_out}/results.json, {base_out}/paths_overlay.png")
+
+        # Display results screen
+        try:
+            overlay_path = os.path.join(base_out, "paths_overlay.png")
+            display_results(consolidated_results, overlay_path, base_out)
+        except Exception as e:
+            print(f"Could not display results screen: {e}")
+
+        return consolidated_results

@@ -3,7 +3,8 @@ import cv2
 
 class HSVTracker:
     def __init__(self, hsv_low=(35,60,60), hsv_high=(85,255,255), morph_kernel=3, min_area=60,
-                 use_flow_fallback=True, flow_win=15, flow_max_level=2):
+                 use_flow_fallback=True, flow_win=15, flow_max_level=2,
+                 use_depth_filter=True, min_depth_mm=200, max_depth_mm=600):
         self.hsv_low = np.array(hsv_low, dtype=np.uint8)
         self.hsv_high = np.array(hsv_high, dtype=np.uint8)
         self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (morph_kernel, morph_kernel))
@@ -13,10 +14,19 @@ class HSVTracker:
         self.prev_pt = None
         self.flow_win = flow_win
         self.flow_max_level = flow_max_level
+        self.use_depth_filter = use_depth_filter
+        self.min_depth_mm = min_depth_mm
+        self.max_depth_mm = max_depth_mm
 
-    def track(self, bgr_img):
+    def track(self, bgr_img, depth_img=None):
         hsv = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, self.hsv_low, self.hsv_high)
+
+        # Apply depth filtering if enabled and depth image provided
+        if self.use_depth_filter and depth_img is not None:
+            depth_mask = ((depth_img >= self.min_depth_mm) & (depth_img <= self.max_depth_mm)).astype(np.uint8) * 255
+            mask = cv2.bitwise_and(mask, depth_mask)
+
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
 

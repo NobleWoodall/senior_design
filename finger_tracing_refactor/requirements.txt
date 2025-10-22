@@ -4,3 +4,4 @@ pyrealsense2
 mediapipe>=0.10.14
 PyYAML
 scipy
+matplotlib
