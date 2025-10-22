@@ -29,6 +29,9 @@ class ExperimentRunner:
         dwell = DwellDetector(self.cfg.dwell.StartRadiusPx, self.cfg.dwell.StartDwellSec,
                               self.cfg.dwell.EndRadiusPx, self.cfg.dwell.StopDwellSec, self.cfg.dwell.hysteresis_px)
 
+        # Scale factor for making spiral appear closer
+        scale_factor = 2.0
+
         times=[]
         errs=[]
         depths=[]
@@ -42,8 +45,19 @@ class ExperimentRunner:
         if color0 is None:
             raise RuntimeError("Failed to read from RealSense.")
         h,w = color0.shape[:2]
-        # Use camera resolution for AR overlay display
-        display_w, display_h = w, h
+        display_w = int(w * scale_factor)
+        display_h = int(h * scale_factor)
+
+        # Create a scaled spiral for display (makes it appear closer)
+        display_spiral = Spiral(display_w, display_h,
+                               self.cfg.spiral.a * scale_factor,
+                               self.cfg.spiral.b * scale_factor,
+                               self.cfg.spiral.turns,
+                               self.cfg.spiral.theta_step)
+        display_endpoints = display_spiral.endpoints()
+        sx_disp, sy_disp = display_endpoints["start"]
+        ex_disp, ey_disp = display_endpoints["end"]
+
         if self.cfg.experiment.save_preview:
             saver.open_video(display_w, display_h, fps)
 
@@ -57,7 +71,7 @@ class ExperimentRunner:
                 continue
             # Create black canvas for AR overlay (what will be sent to glasses)
             view = np.zeros((display_h, display_w, 3), dtype=np.uint8)
-            spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
+            display_spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
 
             # detect (pass depth for HSV tracker, MediaPipe doesn't need it)
             if method == "hsv":
@@ -90,9 +104,13 @@ class ExperimentRunner:
                 st = dwell.update(t_now, d_start, d_end)
                 started = started or st.recording
 
+                # Scale coordinates for display
+                x_disp = int(x * scale_factor)
+                y_disp = int(y * scale_factor)
+
                 if not started:
                     draw_status(view, "standby", (128,128,128))
-                    draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 2)
+                    draw_circle(view, sx_disp, sy_disp, int(self.cfg.dwell.StartRadiusPx * scale_factor), (0,255,255), 2)
                 elif started and not st.end_detected:
                     draw_status(view, "recording", (0,220,0))
                 else:
@@ -100,14 +118,14 @@ class ExperimentRunner:
 
                 # Draw finger tracking dot with glow effect
                 dot_color = (255, 0, 255)  # Bright magenta
-                dot_radius = 12
+                dot_radius = int(12 * scale_factor)
                 # Outer glow
-                draw_circle(view, x, y, dot_radius + 4, dot_color, 2)
+                draw_circle(view, x_disp, y_disp, dot_radius + 4, dot_color, 2)
                 # Solid inner dot
-                draw_circle(view, x, y, dot_radius, dot_color, -1)
+                draw_circle(view, x_disp, y_disp, dot_radius, dot_color, -1)
                 draw_meter(view, err)
-                draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 1)
-                draw_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255,0,255), 1)
+                draw_circle(view, sx_disp, sy_disp, int(self.cfg.dwell.StartRadiusPx * scale_factor), (0,255,255), 1)
+                draw_circle(view, ex_disp, ey_disp, int(self.cfg.dwell.EndRadiusPx * scale_factor), (255,0,255), 1)
                 metronome_overlay(view, t_now, metronome_bpm)
 
                 if started and not st.end_detected:
@@ -129,10 +147,10 @@ class ExperimentRunner:
                 st = dwell.update(t_now, 1e9, 1e9)
                 if not started:
                     draw_status(view, "standby", (128,128,128))
-                    draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 2)
+                    draw_circle(view, sx_disp, sy_disp, int(self.cfg.dwell.StartRadiusPx * scale_factor), (0,255,255), 2)
                 else:
                     draw_status(view, "recording (no-track)", (0,165,255))
-                    draw_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255,0,255), 1)
+                    draw_circle(view, ex_disp, ey_disp, int(self.cfg.dwell.EndRadiusPx * scale_factor), (255,0,255), 1)
                 metronome_overlay(view, t_now, metronome_bpm)
 
             if self.cfg.experiment.save_preview: 
@@ -141,7 +159,7 @@ class ExperimentRunner:
             if show_live_preview:
                 if frame_idx==0:
                     cv2.namedWindow("Finger Trace", cv2.WINDOW_NORMAL)
-                    cv2.resizeWindow("Finger Trace", 960, 540)
+                    cv2.setWindowProperty("Finger Trace", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
                 cv2.imshow("Finger Trace", view)
                 if (cv2.waitKey(1) & 0xFF) == 27:  # ESC
                     trial_active=False
