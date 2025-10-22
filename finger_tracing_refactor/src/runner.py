@@ -30,7 +30,7 @@ class ExperimentRunner:
                               self.cfg.dwell.EndRadiusPx, self.cfg.dwell.StopDwellSec, self.cfg.dwell.hysteresis_px)
 
         # Scale factor for making spiral appear closer
-        scale_factor = 2.0
+        scale_factor = 1.0
 
         times=[]
         errs=[]
