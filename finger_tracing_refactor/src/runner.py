@@ -39,11 +39,13 @@ class ExperimentRunner:
 
         frame_idx=0
         color0, depth0, _ = rsio.get_aligned()
-        if color0 is None: 
+        if color0 is None:
             raise RuntimeError("Failed to read from RealSense.")
         h,w = color0.shape[:2]
-        if self.cfg.experiment.save_preview: 
-            saver.open_video(w,h,fps)
+        # Use camera resolution for AR overlay display
+        display_w, display_h = w, h
+        if self.cfg.experiment.save_preview:
+            saver.open_video(display_w, display_h, fps)
 
         last_xy = None
         MAX_JUMP_PX = int(self.cfg.experiment.max_jump_px)
@@ -51,9 +53,10 @@ class ExperimentRunner:
         started=False
         while trial_active:
             color, depth, t_now = rsio.get_aligned()
-            if color is None: 
+            if color is None:
                 continue
-            view = color.copy()
+            # Create black canvas for AR overlay (what will be sent to glasses)
+            view = np.zeros((display_h, display_w, 3), dtype=np.uint8)
             spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
 
             # detect (pass depth for HSV tracker, MediaPipe doesn't need it)
@@ -95,7 +98,13 @@ class ExperimentRunner:
                 else:
                     draw_status(view, "end-detected", (255,0,0))
 
-                draw_circle(view, x, y, 6, (0,255,255), -1)
+                # Draw finger tracking dot with glow effect
+                dot_color = (255, 0, 255)  # Bright magenta
+                dot_radius = 12
+                # Outer glow
+                draw_circle(view, x, y, dot_radius + 4, dot_color, 2)
+                # Solid inner dot
+                draw_circle(view, x, y, dot_radius, dot_color, -1)
                 draw_meter(view, err)
                 draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 1)
                 draw_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255,0,255), 1)
