@@ -66,17 +66,6 @@ class ExperimentRunner:
             # Create black canvas for AR overlay (what will be sent to glasses)
             view = np.zeros((h, w, 3), dtype=np.uint8)
 
-            # Draw hand pixels that are closer than spiral depth (depth-based occlusion)
-            # This creates the 3D effect where hand appears in front of spiral
-            if depth is not None:
-                # Create mask for pixels closer than spiral depth
-                depth_mask = (depth > 0) & (depth < spiral_depth_mm)
-                # Copy color pixels where mask is true
-                view[depth_mask] = color[depth_mask]
-
-            # Draw spiral on top (at the virtual depth plane)
-            spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
-
             # detect (pass depth for HSV tracker, MediaPipe doesn't need it)
             if method == "hsv":
                 pt = tracker.track(color, depth)
@@ -91,10 +80,14 @@ class ExperimentRunner:
                     dy=y-last_xy[1]
                     if (dx*dx+dy*dy)**0.5 > MAX_JUMP_PX:
                         pt = None
-                if pt is not None: 
+                if pt is not None:
                     last_xy=(x,y)
             else:
                 last_xy=None
+
+            # Calculate spiral opacity based on fingertip depth
+            spiral_opacity = 1.0  # Default: solid (no hand detected)
+            fingertip_depth = None
 
             if pt is not None:
                 x,y = pt
@@ -102,6 +95,30 @@ class ExperimentRunner:
                 err = math.hypot(x-xs, y-ys)
                 z = median_depth_mm(depth, int(round(x)), int(round(y)), depth_win,
                                    self.cfg.camera.min_depth_mm, self.cfg.camera.max_depth_mm)
+                z_valid = float(not math.isnan(z))
+                fingertip_depth = z
+
+                # Stepped opacity based on fingertip depth
+                if not math.isnan(z):
+                    if z < spiral_depth_mm - 50.0:  # Hand closer than 450mm
+                        spiral_opacity = 0.3  # Transparent (dot in front)
+                    elif z < spiral_depth_mm + 50.0:  # Hand between 450-550mm
+                        spiral_opacity = 0.6  # Semi-transparent
+                    else:  # Hand farther than 550mm
+                        spiral_opacity = 1.0  # Opaque (dot behind)
+
+            # Draw spiral with opacity on a separate layer
+            spiral_layer = np.zeros((h, w, 3), dtype=np.uint8)
+            spiral.draw(spiral_layer, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
+
+            # Blend spiral layer onto view with opacity
+            view = cv2.addWeighted(view, 1.0, spiral_layer, spiral_opacity, 0)
+
+            if pt is not None:
+                x,y = pt
+                xs,ys,s_sp,theta_t = spiral.nearest_point(x,y)
+                err = math.hypot(x-xs, y-ys)
+                z = fingertip_depth
                 z_valid = float(not math.isnan(z))
                 d_start = math.hypot(x-sx, y-sy)
                 d_end   = math.hypot(x-ex, y-ey)
@@ -116,13 +133,20 @@ class ExperimentRunner:
                 else:
                     draw_status(view, "end-detected", (255,0,0))
 
-                # Draw finger tracking dot with glow effect
+                # Draw finger tracking dot with glow effect (ALWAYS on top)
                 dot_color = (255, 0, 255)  # Bright magenta
                 dot_radius = 12
                 # Outer glow
                 draw_circle(view, int(x), int(y), dot_radius + 4, dot_color, 2)
                 # Solid inner dot
                 draw_circle(view, int(x), int(y), dot_radius, dot_color, -1)
+
+                # Optional: Show depth info (top-left corner)
+                if not math.isnan(z):
+                    depth_text = f"Depth: {z:.0f}mm | Opacity: {spiral_opacity*100:.0f}%"
+                    cv2.putText(view, depth_text, (10, h - 20),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
+
                 draw_meter(view, err)
                 draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 1)
                 draw_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255,0,255), 1)
