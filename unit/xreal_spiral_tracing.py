@@ -94,10 +94,49 @@ class XRealSpiralTracing:
 
     def start(self):
         """Initialize camera and hand tracking."""
-        print("Starting RealSense camera...")
-        self.camera.start()
-        print("Camera started successfully!")
-        self.running = True
+        print("Checking for RealSense devices...")
+        import pyrealsense2 as rs
+
+        # Check if camera is connected
+        ctx = rs.context()
+        devices = ctx.query_devices()
+
+        if len(devices) == 0:
+            print("\nERROR: No RealSense device found!")
+            print("Please check:")
+            print("  1. RealSense camera is plugged in")
+            print("  2. USB cable is connected properly")
+            print("  3. Try a different USB port (USB 3.0 preferred)")
+            print("  4. Restart the camera or computer if needed")
+            raise RuntimeError("No RealSense device detected")
+
+        print(f"Found {len(devices)} RealSense device(s)")
+        for i, dev in enumerate(devices):
+            print(f"  Device {i}: {dev.get_info(rs.camera_info.name)}")
+
+        print("\nStarting RealSense camera...")
+        try:
+            self.camera.start()
+            print("Camera started successfully!")
+
+            # Warm up - discard first few frames
+            print("Warming up camera (discarding first 10 frames)...")
+            for i in range(10):
+                color, _, _ = self.camera.get_aligned()
+                if color is not None:
+                    print(f"  Frame {i+1}/10 received")
+
+            print("Camera ready!")
+            self.running = True
+
+        except Exception as e:
+            print(f"\nERROR: Failed to start camera: {e}")
+            print("\nTroubleshooting tips:")
+            print("  1. Close any other programs using the camera (RealSense Viewer, etc.)")
+            print("  2. Unplug and replug the camera")
+            print("  3. Try lowering resolution in config.yaml")
+            print("  4. Check if camera works in Intel RealSense Viewer first")
+            raise
 
     def stop(self):
         """Clean up resources."""
