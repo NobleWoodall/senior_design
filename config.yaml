@@ -12,11 +12,11 @@ camera:
   max_depth_mm: 800
 
 spiral:
-  a: 15.0
-  b: 11.0
+  a: 12.0
+  b: 8.0
   turns: 2
   theta_step: 0.01
-  line_thickness: 10
+  line_thickness: 5
   color_bgr: [40, 220, 40]
 
 
@@ -41,7 +41,7 @@ color:
   use_depth_filter: true    # Filter out colors outside depth range
 
 experiment:
-  methods_order: ["mp", "hsv"]
+  methods_order: ["mp", "mp"]
   trials_per_method: 1          # ignored; runner forces 1
   save_preview: false           # set true to write preview.mp4
   output_dir: "runs"

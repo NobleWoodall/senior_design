@@ -1,6 +1,8 @@
-import os, json, math, time
-import numpy as np, cv2
-from typing import Dict, Any
+import os
+import json
+import math
+import numpy as np
+import cv2
 from dataclasses import asdict
 
 from .config import AppConfig
@@ -11,7 +13,7 @@ from .track_mp import MediaPipeTracker
 from .track_hsv import HSVTracker
 from .depth_utils import median_depth_mm
 from .metrics import summarize_errors
-from .viz import draw_status, draw_cross, draw_circle, draw_meter, metronome_overlay
+from .viz import draw_status, draw_circle, draw_meter, metronome_overlay
 from .save import RunSaver
 from .signal_processing import analyze_after_runs
 from .results_display import display_results
@@ -38,18 +40,12 @@ class ExperimentRunner:
         path_err=[]
 
         frame_idx=0
-        color0, depth0, _ = rsio.get_aligned()
+        color0, _, _ = rsio.get_aligned()
         if color0 is None:
             raise RuntimeError("Failed to read from RealSense.")
         h,w = color0.shape[:2]
 
-        # Zoom factor: higher = appears closer (like moving camera closer in Unity)
-        # 1.0 = no zoom, 2.0 = 2x zoom (appears 2x closer)
         zoom_factor = 2.0
-
-        # Virtual depth of spiral plane (in mm) - like Unity's requiredZDistance
-        # Hand closer than this will appear in front of spiral
-        spiral_depth_mm = 500.0  # 0.5 meters
 
         if self.cfg.experiment.save_preview:
             saver.open_video(w, h, fps)
@@ -63,8 +59,9 @@ class ExperimentRunner:
             if color is None:
                 continue
 
-            # Create black canvas for AR overlay (what will be sent to glasses)
+            # Create black canvas for AR overlay
             view = np.zeros((h, w, 3), dtype=np.uint8)
+            spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
 
             # detect (pass depth for HSV tracker, MediaPipe doesn't need it)
             if method == "hsv":
@@ -85,40 +82,12 @@ class ExperimentRunner:
             else:
                 last_xy=None
 
-            # Calculate spiral opacity based on fingertip depth
-            spiral_opacity = 1.0  # Default: solid (no hand detected)
-            fingertip_depth = None
-
             if pt is not None:
                 x,y = pt
-                xs,ys,s_sp,theta_t = spiral.nearest_point(x,y)
+                xs,ys,s_sp,_ = spiral.nearest_point(x,y)
                 err = math.hypot(x-xs, y-ys)
                 z = median_depth_mm(depth, int(round(x)), int(round(y)), depth_win,
                                    self.cfg.camera.min_depth_mm, self.cfg.camera.max_depth_mm)
-                z_valid = float(not math.isnan(z))
-                fingertip_depth = z
-
-                # Stepped opacity based on fingertip depth
-                if not math.isnan(z):
-                    if z < spiral_depth_mm - 50.0:  # Hand closer than 450mm
-                        spiral_opacity = 0.3  # Transparent (dot in front)
-                    elif z < spiral_depth_mm + 50.0:  # Hand between 450-550mm
-                        spiral_opacity = 0.6  # Semi-transparent
-                    else:  # Hand farther than 550mm
-                        spiral_opacity = 1.0  # Opaque (dot behind)
-
-            # Draw spiral with opacity on a separate layer
-            spiral_layer = np.zeros((h, w, 3), dtype=np.uint8)
-            spiral.draw(spiral_layer, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
-
-            # Blend spiral layer onto view with opacity
-            view = cv2.addWeighted(view, 1.0, spiral_layer, spiral_opacity, 0)
-
-            if pt is not None:
-                x,y = pt
-                xs,ys,s_sp,theta_t = spiral.nearest_point(x,y)
-                err = math.hypot(x-xs, y-ys)
-                z = fingertip_depth
                 z_valid = float(not math.isnan(z))
                 d_start = math.hypot(x-sx, y-sy)
                 d_end   = math.hypot(x-ex, y-ey)
@@ -133,20 +102,11 @@ class ExperimentRunner:
                 else:
                     draw_status(view, "end-detected", (255,0,0))
 
-                # Draw finger tracking dot with glow effect (ALWAYS on top)
+                # Draw finger tracking dot with glow effect
                 dot_color = (255, 0, 255)  # Bright magenta
                 dot_radius = 12
-                # Outer glow
                 draw_circle(view, int(x), int(y), dot_radius + 4, dot_color, 2)
-                # Solid inner dot
                 draw_circle(view, int(x), int(y), dot_radius, dot_color, -1)
-
-                # Optional: Show depth info (top-left corner)
-                if not math.isnan(z):
-                    depth_text = f"Depth: {z:.0f}mm | Opacity: {spiral_opacity*100:.0f}%"
-                    cv2.putText(view, depth_text, (10, h - 20),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
-
                 draw_meter(view, err)
                 draw_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0,255,255), 1)
                 draw_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255,0,255), 1)
@@ -211,12 +171,6 @@ class ExperimentRunner:
                 elif key == ord(']'):  # Increase zoom (closer)
                     zoom_factor = min(4.0, zoom_factor + 0.1)
                     print(f"Zoom: {zoom_factor:.1f}x (appears closer)")
-                elif key == ord('-') or key == ord('_'):  # Move spiral depth farther
-                    spiral_depth_mm = max(200.0, spiral_depth_mm - 50.0)
-                    print(f"Spiral depth: {spiral_depth_mm:.0f}mm ({spiral_depth_mm/1000:.2f}m)")
-                elif key == ord('=') or key == ord('+'):  # Move spiral depth closer
-                    spiral_depth_mm = min(800.0, spiral_depth_mm + 50.0)
-                    print(f"Spiral depth: {spiral_depth_mm:.0f}mm ({spiral_depth_mm/1000:.2f}m)")
 
             frame_idx += 1
 
@@ -258,7 +212,6 @@ class ExperimentRunner:
 
         all_summaries = {"mp": [], "hsv": []}
         all_paths = {"mp": None, "hsv": None}
-        cfg_txt = asdict(cfg)
         try:
             for method in order:
                 for _ in range(trials):
