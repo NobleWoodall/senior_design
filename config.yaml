@@ -2,8 +2,8 @@ camera:
   width: 640
   height: 480
   fps: 30
-  use_auto_exposure: true
-  exposure: 100
+  use_auto_exposure: false  # Lock exposure for consistent LED tracking
+  exposure: 50  # Lower value = darker image, LED stands out more
   depth_width: 640
   depth_height: 480
   depth_fps: 30
@@ -19,7 +19,6 @@ spiral:
   line_thickness: 5
   color_bgr: [40, 220, 40]
 
-
 dwell:
   StartRadiusPx: 18
   StartDwellSec: 1.0
@@ -34,14 +33,28 @@ mediapipe:
   ema_alpha: 1.0    # 1.0 disables smoothing (lowest lag)
 
 color:
+  # HSV color tracking settings (for HSV mode)
   hsv_low:  [57, 155, 29]
   hsv_high: [137, 255, 139]
   morph_kernel: 3
   min_area: 60
   use_depth_filter: true    # Filter out colors outside depth range
+  # Optical flow fallback
+  use_flow_fallback: false
+  flow_win: 15
+  flow_max_level: 2
+
+led:
+  # LED tracking settings (combined red HSV + brightness)
+  # Filters out white ceiling lights by requiring BOTH red AND bright
+  hsv_low: [0, 60, 160]      # H: red hue, S: moderate saturation, V: bright
+  hsv_high: [110, 255, 255]  # Wider hue range to catch all reds
+  brightness_threshold: 110  # Minimum brightness (0-255)
+  morph_kernel: 3
+  min_area: 5
 
 experiment:
-  methods_order: ["mp", "mp"]
+  methods_order: ["mp", "hsv"]  # "hsv" now uses LED tracking (red + brightness)
   trials_per_method: 1          # ignored; runner forces 1
   save_preview: false           # set true to write preview.mp4
   output_dir: "runs"

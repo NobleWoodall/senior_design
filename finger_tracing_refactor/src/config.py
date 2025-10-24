@@ -53,6 +53,14 @@ class ColorCfg:
     use_depth_filter:bool=True
 
 @dataclass
+class LEDCfg:
+    hsv_low:Tuple[int,int,int]=(0,60,160)
+    hsv_high:Tuple[int,int,int]=(110,255,255)
+    brightness_threshold:int=110
+    morph_kernel:int=3
+    min_area:int=5
+
+@dataclass
 class ExperimentCfg:
     methods_order:List[str]=field(default_factory=lambda:["mp","hsv"])
     trials_per_method:int=1
@@ -73,6 +81,7 @@ class AppConfig:
     dwell:DwellCfg=field(default_factory=DwellCfg)
     mediapipe:MPcfg=field(default_factory=MPcfg)
     color:ColorCfg=field(default_factory=ColorCfg)
+    led:LEDCfg=field(default_factory=LEDCfg)
     experiment:ExperimentCfg=field(default_factory=ExperimentCfg)
     tremor_analysis:TremorAnalysisCfg=field(default_factory=TremorAnalysisCfg)
     show_live_preview:bool=True
@@ -85,6 +94,7 @@ class AppConfig:
             dwell=DwellCfg(**d.get("dwell",{})),
             mediapipe=MPcfg(**d.get("mediapipe",{})),
             color=ColorCfg(**d.get("color",{})),
+            led=LEDCfg(**d.get("led",{})),
             experiment=ExperimentCfg(**d.get("experiment",{})),
             tremor_analysis=TremorAnalysisCfg(**d.get("tremor_analysis",{})),
             show_live_preview=bool(d.get("show_live_preview", True)),

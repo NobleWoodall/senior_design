@@ -10,7 +10,7 @@ from .io_rs import RealSenseIO
 from .spiral import Spiral
 from .dwell import DwellDetector
 from .track_mp import MediaPipeTracker
-from .track_hsv import HSVTracker
+from .track_led import LEDTracker
 from .depth_utils import median_depth_mm
 from .metrics import summarize_errors
 from .viz import draw_status, draw_circle, draw_meter, metronome_overlay
@@ -63,11 +63,8 @@ class ExperimentRunner:
             view = np.zeros((h, w, 3), dtype=np.uint8)
             spiral.draw(view, color=tuple(self.cfg.spiral.color_bgr), thickness=self.cfg.spiral.line_thickness)
 
-            # detect (pass depth for HSV tracker, MediaPipe doesn't need it)
-            if method == "hsv":
-                pt = tracker.track(color, depth)
-            else:
-                pt = tracker.track(color)
+            # detect finger/LED
+            pt = tracker.track(color)
 
             # jump gate BEFORE metrics
             if pt is not None:
@@ -104,7 +101,7 @@ class ExperimentRunner:
 
                 # Draw finger tracking dot with glow effect
                 dot_color = (255, 0, 255)  # Bright magenta
-                dot_radius = 12
+                dot_radius = 4
                 draw_circle(view, int(x), int(y), dot_radius + 4, dot_color, 2)
                 draw_circle(view, int(x), int(y), dot_radius, dot_color, -1)
                 draw_meter(view, err)
@@ -197,17 +194,16 @@ class ExperimentRunner:
 
         mp_tracker = MediaPipeTracker(cfg.mediapipe.model_complexity, cfg.mediapipe.detection_confidence,
                                       cfg.mediapipe.tracking_confidence, cfg.mediapipe.ema_alpha)
-        hsv_tracker = HSVTracker(tuple(cfg.color.hsv_low), tuple(cfg.color.hsv_high),
-                                 cfg.color.morph_kernel, cfg.color.min_area,
-                                 cfg.color.use_flow_fallback, cfg.color.flow_win, cfg.color.flow_max_level,
-                                 cfg.color.use_depth_filter, cfg.camera.min_depth_mm, cfg.camera.max_depth_mm)
+        # Use LED tracker for HSV method (combined red + brightness)
+        hsv_tracker = LEDTracker(tuple(cfg.led.hsv_low), tuple(cfg.led.hsv_high),
+                                cfg.led.brightness_threshold, cfg.led.morph_kernel, cfg.led.min_area)
 
         order = cfg.experiment.methods_order
         trials = 1  # force exactly one per method
         base_out = cfg.experiment.output_dir
         os.makedirs(base_out, exist_ok=True)
 
-        with open(os.path.join(base_out, "intrinsics.json"), "w") as f: 
+        with open(os.path.join(base_out, "intrinsics.json"), "w") as f:
             json.dump(intr, f, indent=2)
 
         all_summaries = {"mp": [], "hsv": []}
@@ -263,7 +259,7 @@ class ExperimentRunner:
             json.dump(consolidated_results, f, indent=2)
 
         print("\n=== Results Summary ===")
-        for m in ["mp","hsv"]:
+        for m in ["mp", "hsv"]:
             if all_summaries[m]:
                 s = all_summaries[m][0]
                 rmse = s.get("rmse_time_weighted", 0)
