@@ -1,0 +1,202 @@
+# IMU_BLE.py — BLE stream + fast live plotting with PyQtGraph (time starts at 0)
+import sys, asyncio, time, numpy as np
+from collections import deque
+from typing import Iterable, List, Tuple, Optional
+
+# --- Windows BLE event loop fix (set BEFORE importing bleak) ---
+if sys.platform.startswith("win"):
+    import asyncio as _asyncio
+    _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
+
+from bleak import BleakScanner, BleakClient
+from bleak.backends.device import BLEDevice
+from bleak.backends.scanner import AdvertisementData
+
+from PyQt5 import QtWidgets, QtCore
+import pyqtgraph as pg
+from qasync import QEventLoop
+
+# ====== Your UUIDs / device name (must match your ESP32 sketch) ======
+TARGET_NAME  = "ESP32-IMU"
+SERVICE_UUID = "d973f2c0-0000-4b5e-8f79-1a0d9d0a0001"
+CHAR_UUID    = "d973f2c0-0001-4b5e-8f79-1a0d9d0a0001"
+
+# ====== Data layout: 6 float32 (ax ay az gx gy gz) ======
+SAMPLE_COLS = 6  # ax, ay, az, gx, gy, gz
+
+# ====== Buffers (ring) ======
+MAX_SAMPLES = 20000
+t0 = None
+t_buf  = deque(maxlen=MAX_SAMPLES)
+ax_buf = deque(maxlen=MAX_SAMPLES); ay_buf = deque(maxlen=MAX_SAMPLES); az_buf = deque(maxlen=MAX_SAMPLES)
+gx_buf = deque(maxlen=MAX_SAMPLES); gy_buf = deque(maxlen=MAX_SAMPLES); gz_buf = deque(maxlen=MAX_SAMPLES)
+
+# ---------------- BLE helpers ----------------
+async def discover_pairs(timeout: float = 5.0) -> List[Tuple[BLEDevice, AdvertisementData]]:
+    raw = await BleakScanner.discover(timeout=timeout, return_adv=True)
+    if isinstance(raw, dict):
+        return list(raw.values())
+    return raw
+
+def choose_device(pairs: List[Tuple[BLEDevice, AdvertisementData]]) -> Optional[BLEDevice]:
+    svc_hits = [(d, a) for d, a in pairs
+                if a.service_uuids and any(u.lower() == SERVICE_UUID.lower() for u in a.service_uuids)]
+    if svc_hits:
+        return max(svc_hits, key=lambda t: (t[1].rssi or -9999))[0]
+    name_hits = [(d, a) for d, a in pairs
+                 if (a.local_name or d.name or "").find(TARGET_NAME) >= 0]
+    if name_hits:
+        return max(name_hits, key=lambda t: (t[1].rssi or -9999))[0]
+    return None
+
+async def connected_bool(client: BleakClient) -> bool:
+    val = getattr(client, "is_connected", None)
+    if isinstance(val, bool):
+        return val
+    try:
+        return bool(await client.is_connected())  # type: ignore[attr-defined]
+    except TypeError:
+        return bool(getattr(client, "is_connected", False))
+
+# --------------- Notify callback (vectorized) ---------------
+def on_notify(_handle: int, data: bytearray):
+    """Parse N×6 float32 in one shot and append to deques with a single timestamp batch."""
+    global t0
+    if not data:
+        return
+    now = time.time()
+    if t0 is None:
+        t0 = now
+
+    arr = np.frombuffer(data, dtype="<f4")
+    n = arr.size // SAMPLE_COLS
+    if n == 0:
+        return
+    samples = arr[: n * SAMPLE_COLS].reshape(n, SAMPLE_COLS)
+
+    t_rel = now - t0
+    t_vals = [t_rel] * n
+
+    t_buf.extend(t_vals)
+    ax_buf.extend(samples[:, 0]); ay_buf.extend(samples[:, 1]); az_buf.extend(samples[:, 2])
+    gx_buf.extend(samples[:, 3]); gy_buf.extend(samples[:, 4]); gz_buf.extend(samples[:, 5])
+
+# --------------- Qt Window with PyQtGraph ---------------
+class PlotWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("ESP32 IMU Stream (BLE)")
+
+        # Layout
+        vbox = QtWidgets.QVBoxLayout(self)
+
+        self.status = QtWidgets.QLabel("Status: scanning…")
+        vbox.addWidget(self.status)
+
+        # Two plots: accel (top), gyro (bottom)
+        self.accel_plot = pg.PlotWidget(title="Acceleration")
+        self.gyro_plot  = pg.PlotWidget(title="Gyro")
+        vbox.addWidget(self.accel_plot)
+        vbox.addWidget(self.gyro_plot)
+
+        # Pen colors: X=red, Y=blue, Z=green
+        self.ax_x = self.accel_plot.plot(pen=pg.mkPen('r'), name='Ax')
+        self.ax_y = self.accel_plot.plot(pen=pg.mkPen('b'), name='Ay')
+        self.ax_z = self.accel_plot.plot(pen=pg.mkPen('g'), name='Az')
+        self.gx_x = self.gyro_plot.plot (pen=pg.mkPen('r'), name='Gx')
+        self.gx_y = self.gyro_plot.plot (pen=pg.mkPen('b'), name='Gy')
+        self.gx_z = self.gyro_plot.plot (pen=pg.mkPen('g'), name='Gz')
+
+        self.accel_plot.addLegend(offset=(10, 10))
+        self.gyro_plot.addLegend(offset=(10, 10))
+        self.accel_plot.setLabel('left', 'Acceleration', units='g')
+        self.gyro_plot.setLabel('left', 'Gyro', units='°/s')
+        self.gyro_plot.setLabel('bottom', 'Time', units='s')
+
+        # Smooth updates at ~60 FPS
+        self.timer = QtCore.QTimer(self)
+        self.timer.setInterval(16)
+        self.timer.timeout.connect(self.update_plots)
+        self.timer.start()
+
+    @QtCore.pyqtSlot(str)
+    def set_status(self, text: str):
+        self.status.setText(f"Status: {text}")
+
+    def update_plots(self):
+        if len(t_buf) < 2:
+            return
+        # Convert deques -> numpy arrays (fast)
+        t_arr  = np.fromiter(t_buf, dtype=np.float64)
+        ax_arr = np.fromiter(ax_buf, dtype=np.float32)
+        ay_arr = np.fromiter(ay_buf, dtype=np.float32)
+        az_arr = np.fromiter(az_buf, dtype=np.float32)
+        gx_arr = np.fromiter(gx_buf, dtype=np.float32)
+        gy_arr = np.fromiter(gy_buf, dtype=np.float32)
+        gz_arr = np.fromiter(gz_buf, dtype=np.float32)
+
+        self.ax_x.setData(t_arr, ax_arr)
+        self.ax_y.setData(t_arr, ay_arr)
+        self.ax_z.setData(t_arr, az_arr)
+
+        self.gx_x.setData(t_arr, gx_arr)
+        self.gx_y.setData(t_arr, gy_arr)
+        self.gx_z.setData(t_arr, gz_arr)
+
+        # Auto-range to current data
+        self.accel_plot.enableAutoRange(axis=pg.ViewBox.XYAxes, enable=True)
+        self.gyro_plot.enableAutoRange(axis=pg.ViewBox.XYAxes, enable=True)
+
+# --------------- BLE worker (runs under the Qt/asyncio event loop) ---------------
+async def ble_worker(ui: PlotWindow):
+    ui.set_status("scanning…")
+    pairs = await discover_pairs(5.0)
+    dev = choose_device(pairs)
+    if not dev:
+        ui.set_status("device not found")
+        return
+
+    ui.set_status(f"connecting to {dev.address}…")
+    async with BleakClient(dev) as client:
+        if not await connected_bool(client):
+            ui.set_status("connection failed")
+            return
+
+        ui.set_status("connected; starting notify…")
+        await client.start_notify(CHAR_UUID, on_notify)
+
+        try:
+            # Keep BLE alive until window closes
+            while True:
+                await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            try:
+                await client.stop_notify(CHAR_UUID)
+            except Exception:
+                pass
+            ui.set_status("disconnected")
+
+# --------------- Main (Qt + asyncio via qasync) ---------------
+def main():
+    app = QtWidgets.QApplication(sys.argv)
+    pg.setConfigOptions(antialias=True)
+
+    window = PlotWindow()
+    window.resize(900, 600)
+    window.show()
+
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
+
+    ble_task = loop.create_task(ble_worker(window))
+
+    # Ensure BLE task is cancelled when the app quits
+    app.aboutToQuit.connect(lambda: ble_task.cancel())
+
+    with loop:
+        loop.run_forever()
+
+if __name__ == "__main__":
+    main()
