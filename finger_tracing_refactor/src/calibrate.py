@@ -17,7 +17,7 @@ from .io_rs import RealSenseIO
 from .spiral_3d import Spiral3D
 from .track_mp import MediaPipeTracker
 from .track_led import LEDTracker
-from .calibration_utils import compute_calibration, save_calibration, validate_calibration, apply_calibration
+from .calibration_utils import compute_calibration, save_calibration, validate_calibration
 
 
 class CalibrationRunner:
@@ -80,9 +80,7 @@ class CalibrationRunner:
         """
         print("\n=== TEST CALIBRATION ===")
         print("Trace the spiral to see if calibration is accurate")
-        print(f"\nUsing calibration matrix:")
-        print(calibration_matrix)
-        print("\nControls:")
+        print("Controls:")
         print("  K = Keep this calibration and finish")
         print("  R = Redo calibration")
         print("  ESC = Cancel and exit")
@@ -122,14 +120,6 @@ class CalibrationRunner:
                 # Apply calibration transform
                 x_cam_cal, y_cam_cal = apply_calibration(calibration_matrix, x_cam, y_cam)
 
-                # Debug: Print first frame transformation (only once)
-                if not hasattr(self, '_debug_printed'):
-                    print(f"\n[DEBUG] First frame transformation:")
-                    print(f"  Raw camera: ({x_cam:.1f}, {y_cam:.1f})")
-                    print(f"  After calibration: ({x_cam_cal:.1f}, {y_cam_cal:.1f})")
-                    print(f"  Offset: ({x_cam_cal - x_cam:.1f}, {y_cam_cal - y_cam:.1f})")
-                    self._debug_printed = True
-
                 # Scale to display coordinates
                 x = x_cam_cal * scale_x
                 y = y_cam_cal * scale_y
@@ -167,25 +157,17 @@ class CalibrationRunner:
             elif key == ord('r') or key == ord('R'):
                 return "redo"
 
-    def run_calibration(self, method: str = "hsv", initial_matrix: np.ndarray = None) -> bool:
+    def run_calibration(self, method: str = "hsv") -> bool:
         """
         Run calibration routine.
 
         Args:
             method: Tracking method to use ("mp" or "hsv")
-            initial_matrix: Optional initial calibration matrix to refine
 
         Returns:
-            True if calibration succeeded, False otherwise, or "redo" to refine
+            True if calibration succeeded, False otherwise
         """
         cfg = self.cfg
-
-        # Track if we're refining an existing calibration
-        is_refinement = initial_matrix is not None
-        if is_refinement:
-            print("\n[Calibration] REFINEMENT MODE - Using existing calibration as baseline")
-            print("Existing matrix:")
-            print(initial_matrix)
 
         # Initialize camera
         print("\n=== Starting Calibration ===")
@@ -267,11 +249,7 @@ class CalibrationRunner:
 
             # Preview phase - show starting position
             print(f"\n=== PREVIEW PHASE ===")
-            if is_refinement:
-                print("Refinement mode: The purple dot shows your position WITH current calibration applied")
-                print("Position yourself at the starting dot (center of spiral)")
-            else:
-                print("Position yourself to see the starting dot (center of spiral)")
+            print("Position yourself to see the starting dot (center of spiral)")
             print("Press SPACE when ready to start countdown, or ESC to cancel")
 
             preview_ready = False
@@ -293,19 +271,10 @@ class CalibrationRunner:
                 pt = tracker.track(color)
                 if pt is not None:
                     x_cam, y_cam = pt
-
-                    # Apply existing calibration if refining
-                    if initial_matrix is not None:
-                        x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
-
                     x_display = x_cam * scale_x
                     y_display = y_cam * scale_y
-                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
-
-                    status = "PREVIEW - Your finger is visible"
-                    if initial_matrix is not None:
-                        status += " (with current calibration)"
-                    self._draw_stereo_text(view, status, (0, 255, 0), 40)
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
+                    self._draw_stereo_text(view, "PREVIEW - Your finger is visible", (0, 255, 0), 40)
                 else:
                     self._draw_stereo_text(view, "PREVIEW - No tracking", (0, 0, 255), 40)
 
@@ -393,7 +362,7 @@ class CalibrationRunner:
                 # Get dot position
                 dot_x, dot_y = self._get_dot_position_at_time(spiral, elapsed, revolutions_per_sec)
 
-                # Draw moving target dot at spiral depth (YELLOW)
+                # Draw moving dot at spiral depth
                 spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=15)
 
                 # Track finger/LED
@@ -414,44 +383,30 @@ class CalibrationRunner:
 
                 # Collect data if tracking successful
                 if pt is not None:
-                    x_cam_original, y_cam_original = pt  # Store original for calibration data collection
                     x_cam, y_cam = pt
-
-                    # Apply existing calibration if refining
-                    if initial_matrix is not None:
-                        x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
 
                     # Scale to display coordinates for visualization
                     x_display = x_cam * scale_x
                     y_display = y_cam * scale_y
 
-                    # Draw tracked finger position (PURPLE/MAGENTA)
-                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
-
-                    # Calculate and show error distance
-                    error_px = math.hypot(x_display - dot_x, y_display - dot_y)
+                    # Draw tracked finger position
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
 
                     # Store calibration pair (camera coords for src, camera coords for dst)
                     # Convert dot position from display back to camera coordinates
                     dot_x_cam = dot_x / scale_x
                     dot_y_cam = dot_y / scale_y
 
-                    # For refinement, use original raw position as source
-                    # so we can compose the matrices later
-                    src_points.append((x_cam_original, y_cam_original) if initial_matrix is not None else (x_cam, y_cam))
+                    src_points.append((x_cam, y_cam))
                     dst_points.append((dot_x_cam, dot_y_cam))
                     tracked_count += 1
 
-                    # Draw status with error feedback
-                    progress_pct = (elapsed / trace_duration) * 100
-                    self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
-                    self._draw_stereo_text(view, f"Points: {tracked_count} | Error: {error_px:.1f}px", (200, 200, 200), 80)
-                    self._draw_stereo_text(view, "Yellow=Target | Purple=Your Finger", (200, 200, 200), 120)
-                else:
-                    # Draw status without tracking
-                    progress_pct = (elapsed / trace_duration) * 100
-                    self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
-                    self._draw_stereo_text(view, f"Points: {tracked_count}", (200, 200, 200), 80)
+                # Draw status
+                progress_pct = (elapsed / trace_duration) * 100
+                self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
+                self._draw_stereo_text(view, f"Points collected: {tracked_count}", (200, 200, 200), 80)
+
+                if pt is None:
                     self._draw_stereo_text(view, "NO TRACKING - Keep finger/LED visible", (0, 0, 255), 120)
 
                 cv2.imshow("Calibration", view)
@@ -526,29 +481,10 @@ class CalibrationRunner:
             if test_result == "keep":
                 # Save calibration
                 output_dir = cfg.experiment.output_dir
-                print(f"\n[DEBUG] Saving calibration...")
-                print(f"  output_dir from config: {output_dir}")
-                print(f"  calibration_file from config: {cfg.calibration.calibration_file}")
-
-                # Make absolute path
-                if not os.path.isabs(output_dir):
-                    output_dir = os.path.abspath(output_dir)
-                    print(f"  Converted to absolute path: {output_dir}")
-
                 os.makedirs(output_dir, exist_ok=True)
                 calibration_file = os.path.join(output_dir, cfg.calibration.calibration_file)
 
-                print(f"  Full path: {calibration_file}")
-                print(f"  Matrix to save:")
-                print(matrix)
-
                 save_calibration(matrix, calibration_file)
-
-                # Verify file was created
-                if os.path.exists(calibration_file):
-                    print(f"  ✓ File verified: {calibration_file}")
-                else:
-                    print(f"  ✗ ERROR: File was not created!")
 
                 print(f"\n=== CALIBRATION COMPLETE ===")
                 print(f"Calibration saved to: {calibration_file}")

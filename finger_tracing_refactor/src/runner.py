@@ -31,22 +31,13 @@ class ExperimentRunner:
 
         # Load calibration if enabled
         if cfg.calibration.enabled:
-            output_dir = cfg.experiment.output_dir
-            if not os.path.isabs(output_dir):
-                output_dir = os.path.abspath(output_dir)
-
-            calibration_path = os.path.join(output_dir, cfg.calibration.calibration_file)
-            print(f"[Calibration] Attempting to load from: {calibration_path}")
-            print(f"[Calibration] File exists: {os.path.exists(calibration_path)}")
-
+            calibration_path = os.path.join(cfg.experiment.output_dir, cfg.calibration.calibration_file)
             self.calibration_matrix = load_calibration(calibration_path)
             if self.calibration_matrix is None:
                 print(f"[Warning] Calibration enabled but failed to load from: {calibration_path}")
                 print("[Warning] Continuing without calibration")
             else:
-                print(f"[Calibration] Loaded successfully!")
-                print(f"[Calibration] Matrix:")
-                print(self.calibration_matrix)
+                print(f"[Calibration] Loaded successfully")
         else:
             print("[Calibration] Disabled (set calibration.enabled=true in config to enable)")
 
