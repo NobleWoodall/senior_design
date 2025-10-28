@@ -68,5 +68,7 @@ tremor_analysis:
 stereo_3d:
   target_depth_m: 0.5        # Spiral perceived depth in meters for XReal glasses
   disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
+  flip_x: true               # Flip horizontal axis (for head-mounted camera)
+  flip_y: false              # Flip vertical axis
 
 show_live_preview: true

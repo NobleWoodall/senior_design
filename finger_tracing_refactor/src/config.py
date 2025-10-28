@@ -78,6 +78,8 @@ class TremorAnalysisCfg:
 class Stereo3DCfg:
     target_depth_m:float=0.5
     disparity_offset_px:float=0.0
+    flip_x:bool=False
+    flip_y:bool=False
 
 @dataclass
 class AppConfig:

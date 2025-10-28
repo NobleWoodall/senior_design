@@ -128,6 +128,12 @@ class ExperimentRunner:
                 x = x_cam * scale_x
                 y = y_cam * scale_y
 
+                # Apply coordinate flipping for head-mounted camera
+                if self.cfg.stereo_3d.flip_x:
+                    x = self.EYE_WIDTH - x
+                if self.cfg.stereo_3d.flip_y:
+                    y = self.EYE_HEIGHT - y
+
                 # Find nearest spiral point
                 xs, ys, s_sp, _ = spiral.nearest_point(x, y)
                 err = math.hypot(x-xs, y-ys)
@@ -282,14 +288,47 @@ class ExperimentRunner:
             except Exception:
                 pass
 
-        # Post-analysis
+        # Post-analysis: Generate paths overlay and signal analysis
         signal_data = {}
         try:
-            # Note: spiral_3d doesn't have .curve attribute, skip post-analysis for now
-            # This can be added later if needed
-            pass
+            from .signal_processing import draw_paths_overlay, analyze_after_runs
+
+            # Generate paths overlay image
+            overlay_path = os.path.join(base_out, "paths_overlay.png")
+
+            # Transform spiral points to display coordinates for visualization
+            spiral_pts_display = spiral.spiral_points.copy()
+            cx = spiral.EYE_WIDTH / 2.0
+            cy = spiral.EYE_HEIGHT / 2.0
+            spiral_pts_display[:, 0] += cx
+            spiral_pts_display[:, 1] += cy
+
+            # Get path data
+            path_mp = all_paths.get("mp", {}).get("xy", [])
+            path_hsv = all_paths.get("hsv", {}).get("xy", [])
+
+            # Draw overlay
+            draw_paths_overlay(self.EYE_WIDTH, self.EYE_HEIGHT, spiral_pts_display,
+                             path_mp, path_hsv, overlay_path)
+            print(f"Paths overlay saved: {overlay_path}")
+
+            # Generate signal analysis (tremor, FFT, PSD)
+            signal_data = analyze_after_runs(
+                all_paths,
+                spiral_pts_display,
+                self.EYE_WIDTH,
+                self.EYE_HEIGHT,
+                base_out,
+                target_fs=cfg.camera.fps,
+                tremor_band_low=cfg.tremor_analysis.band_low_hz,
+                tremor_band_high=cfg.tremor_analysis.band_high_hz
+            )
+            print("Signal analysis completed")
+
         except Exception as e:
-            print("Post-analysis failed:", e)
+            print(f"Post-analysis failed: {e}")
+            import traceback
+            traceback.print_exc()
 
         # Consolidated results
         consolidated_results = {
