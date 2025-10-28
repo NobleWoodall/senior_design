@@ -54,54 +54,106 @@ def main():
 
     runner = CalibrationRunner(cfg)
 
-    # Loop to allow redoing calibration
-    max_attempts = 10  # Prevent infinite loop
-    attempt = 1
+    # Loop to allow iterative calibration refinement
+    max_iterations = 20  # Allow many refinement iterations
+    iteration = 1
+    current_matrix = None  # Will hold the accumulated calibration matrix
 
-    while attempt <= max_attempts:
-        print(f"\n{'='*60}")
-        print(f"CALIBRATION ATTEMPT #{attempt}")
-        print(f"{'='*60}\n")
+    # Output directory for calibration file
+    output_dir = cfg.experiment.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+    calibration_file = os.path.join(output_dir, cfg.calibration.calibration_file)
 
-        result = runner.run_calibration(method=args.method)
+    while iteration <= max_iterations:
+        print("\n" + "="*60)
+        if iteration == 1:
+            print("INITIAL CALIBRATION")
+        else:
+            print(f"REFINEMENT ITERATION #{iteration - 1}")
+        print("="*60 + "\n")
+
+        # Run calibration (with current matrix if refining)
+        if current_matrix is not None:
+            print(f"\n[DEBUG] Passing calibration matrix to iteration {iteration}:")
+            print(current_matrix)
+            print()
+
+        result = runner.run_calibration(method=args.method, initial_matrix=current_matrix)
 
         if result == True:
-            # User kept the calibration
-            print("\n" + "="*60)
-            print("SUCCESS: Calibration complete!")
-            print("="*60)
-            print("\nNext steps:")
-            print("  1. Enable calibration in config.yaml:")
-            print("       calibration:")
-            print("         enabled: true")
-            print("  2. Run experiments as normal - calibration will be applied automatically")
-            print("\n" + "="*60 + "\n")
-            sys.exit(0)
+            # User pressed K (keep) - load the newly saved matrix
+            from src.calibration_utils import load_calibration
+            import time
+
+            # Load the newly saved matrix
+            new_matrix = load_calibration(calibration_file)
+
+            if new_matrix is not None:
+                current_matrix = new_matrix
+
+                print("\n" + "="*60)
+                print(f"ITERATION #{iteration} SAVED")
+                print("="*60)
+                print("\nOptions:")
+                print("  - Press CTRL+C to finish and keep this calibration")
+                print("  - Or wait 3 seconds to continue refining...")
+                print("\n" + "="*60 + "\n")
+
+                # Give user time to press CTRL+C or continue
+                try:
+                    for i in range(3, 0, -1):
+                        print(f"Continuing in {i}...")
+                        time.sleep(1)
+                    print("\nStarting next refinement iteration...\n")
+                    iteration += 1
+                    continue
+                except KeyboardInterrupt:
+                    print("\n\n" + "="*60)
+                    print("CALIBRATION COMPLETE")
+                    print("="*60)
+                    print(f"\nFinal calibration saved to: {calibration_file}")
+                    print(f"Total iterations: {iteration}")
+                    print("\nNext steps:")
+                    print("  1. Enable calibration in config.yaml:")
+                    print("       calibration:")
+                    print("         enabled: true")
+                    print("  2. Run experiments as normal - calibration will be applied automatically")
+                    print("\n" + "="*60 + "\n")
+                    sys.exit(0)
+            else:
+                print("\n[ERROR] Failed to load saved calibration matrix")
+                sys.exit(1)
+
         elif result == "redo":
-            # User wants to redo calibration
-            print(f"\nStarting calibration attempt #{attempt + 1}...")
-            attempt += 1
+            # User pressed R - redo current iteration (don't save, start over)
+            print(f"\nRedoing iteration #{iteration}...")
             continue
         else:
-            # User cancelled or error occurred
-            print("\n" + "="*60)
-            print("CANCELLED: Calibration did not complete")
-            print("="*60)
-            print("\nTroubleshooting:")
-            print("  - Ensure your finger/LED is clearly visible")
-            print("  - Check camera exposure and tracking settings")
-            print("  - Try slower dot speed in config.yaml")
-            print("  - Ensure good lighting conditions")
-            print("\n" + "="*60 + "\n")
-            sys.exit(1)
+            # User cancelled (ESC) or error occurred
+            if current_matrix is not None:
+                print("\n" + "="*60)
+                print("CALIBRATION CANCELLED")
+                print("="*60)
+                print(f"\nLast successful calibration (iteration #{iteration - 1}) is still saved")
+                print(f"File: {calibration_file}")
+                print("\n" + "="*60 + "\n")
+                sys.exit(0)
+            else:
+                print("\n" + "="*60)
+                print("CALIBRATION CANCELLED")
+                print("="*60)
+                print("\nNo calibration was saved")
+                print("\n" + "="*60 + "\n")
+                sys.exit(1)
 
-    # Too many attempts
+    # Too many iterations
     print("\n" + "="*60)
-    print(f"ERROR: Maximum attempts ({max_attempts}) reached")
+    print(f"MAXIMUM ITERATIONS REACHED ({max_iterations})")
     print("="*60)
-    print("\nPlease check your setup and try again later")
+    print(f"\nCalibration saved with {iteration - 1} refinement iterations")
+    print(f"File: {calibration_file}")
     print("\n" + "="*60 + "\n")
-    sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
