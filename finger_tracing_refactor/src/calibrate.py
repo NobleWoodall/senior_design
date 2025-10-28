@@ -240,13 +240,19 @@ class CalibrationRunner:
         print(f"\n=== Calibration Points: {num_points} ===")
         print("For each point:")
         print("  1. Position your LED on the YELLOW dot")
-        print("  2. Press SPACE when aligned")
-        print("  3. Move to next point")
+        print("  2. Keep it aligned for 3 seconds")
+        print("  3. Automatically moves to next point")
         print("\nPress ESC to cancel at any time")
 
         # Data collection
         src_points = []  # Detected finger positions (camera coords)
         dst_points = []  # Ground truth dot positions (camera coords)
+
+        # Auto-record settings
+        ERROR_THRESHOLD = 30.0  # pixels - how close to be "aligned"
+        DWELL_TIME = 3.0  # seconds - how long to stay aligned
+        dwell_start = None
+        accumulated_samples = []  # Store samples during dwell
 
         try:
             # Create window
@@ -294,14 +300,54 @@ class CalibrationRunner:
                     # Calculate error
                     error_px = math.hypot(x_display - dot_x, y_display - dot_y)
 
-                    # Status
-                    self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - Error: {error_px:.1f}px", (0, 255, 0), 40)
-                    self._draw_stereo_text(view, "Position LED on YELLOW dot, then press SPACE", (200, 200, 200), 80)
-                    self._draw_stereo_text(view, "Yellow=Target | Purple=Your LED", (200, 200, 200), 120)
+                    # Auto-record logic: dwell detection
+                    if error_px < ERROR_THRESHOLD:
+                        # Within threshold - start or continue dwell
+                        if dwell_start is None:
+                            dwell_start = time.time()
+                            accumulated_samples = []
+
+                        # Accumulate samples
+                        accumulated_samples.append((x_cam_original, y_cam_original))
+
+                        # Check dwell duration
+                        dwell_elapsed = time.time() - dwell_start
+                        remaining_time = DWELL_TIME - dwell_elapsed
+
+                        if dwell_elapsed >= DWELL_TIME:
+                            # Dwell complete - record point using average of samples
+                            avg_x = sum(s[0] for s in accumulated_samples) / len(accumulated_samples)
+                            avg_y = sum(s[1] for s in accumulated_samples) / len(accumulated_samples)
+
+                            # Convert dot position to camera coords
+                            dot_x_cam = dot_x / scale_x
+                            dot_y_cam = dot_y / scale_y
+
+                            src_points.append((avg_x, avg_y))
+                            dst_points.append((dot_x_cam, dot_y_cam))
+
+                            print(f"  Point {current_point_idx + 1} recorded - Error: {error_px:.1f}px (avg of {len(accumulated_samples)} samples)")
+                            current_point_idx += 1
+                            dwell_start = None
+                            accumulated_samples = []
+                        else:
+                            # Still dwelling
+                            self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - Hold steady: {remaining_time:.1f}s", (0, 255, 0), 40)
+                            self._draw_stereo_text(view, f"Error: {error_px:.1f}px - Keep aligned!", (200, 200, 200), 80)
+                            self._draw_stereo_text(view, "Yellow=Target | Purple=Your LED", (200, 200, 200), 120)
+                    else:
+                        # Outside threshold - reset dwell
+                        dwell_start = None
+                        accumulated_samples = []
+                        self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - Error: {error_px:.1f}px", (255, 165, 0), 40)
+                        self._draw_stereo_text(view, f"Get closer! (need < {ERROR_THRESHOLD:.0f}px)", (200, 200, 200), 80)
+                        self._draw_stereo_text(view, "Yellow=Target | Purple=Your LED", (200, 200, 200), 120)
                 else:
-                    # No tracking
+                    # No tracking - reset dwell
+                    dwell_start = None
+                    accumulated_samples = []
                     self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - NO TRACKING", (0, 0, 255), 40)
-                    self._draw_stereo_text(view, "Make LED visible, then press SPACE", (200, 200, 200), 80)
+                    self._draw_stereo_text(view, "Make LED visible", (200, 200, 200), 80)
 
                 cv2.imshow("Calibration_Stationary", view)
 
