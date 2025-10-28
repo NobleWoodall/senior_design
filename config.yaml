@@ -13,16 +13,16 @@ camera:
 
 spiral:
   a: 30.0
-  b: 40.0
+  b: 35.0
   turns: 2
   theta_step: 0.01
-  line_thickness: 20
+  line_thickness: 30
   color_bgr: [40, 220, 40]
 
 dwell:
-  StartRadiusPx: 18
+  StartRadiusPx: 25
   StartDwellSec: 1.0
-  EndRadiusPx: 18
+  EndRadiusPx: 25
   StopDwellSec: 1.0
   hysteresis_px: 6
 
@@ -70,7 +70,7 @@ stereo_3d:
   disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
   flip_x: true               # Flip horizontal axis (for head-mounted camera)
   flip_y: false              # Flip vertical axis
-  finger_scale_x: 1.0        # No scaling needed with 1920x1080 camera
-  finger_scale_y: 1.0        # Direct 1:1 pixel mapping
+  finger_scale_x: 0.67       # FOV compensation (Display 46° / Camera 69° ≈ 0.67)
+  finger_scale_y: 0.67       # FOV compensation vertical
 
 show_live_preview: true

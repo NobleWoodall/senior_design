@@ -36,13 +36,16 @@ class MediaPipeTracker:
             self.history.pop(0)
 
         # Temporal median filter to reduce jitter from detection variance
-        if len(self.history) >= 2:
-            x_vals = [pt[0] for pt in self.history]
-            y_vals = [pt[1] for pt in self.history]
-            x = float(np.median(x_vals))
-            y = float(np.median(y_vals))
-        else:
-            x, y = x_raw, y_raw
+        # DISABLED for lower latency - use raw position
+        x, y = x_raw, y_raw
+
+        # if len(self.history) >= 2:
+        #     x_vals = [pt[0] for pt in self.history]
+        #     y_vals = [pt[1] for pt in self.history]
+        #     x = float(np.median(x_vals))
+        #     y = float(np.median(y_vals))
+        # else:
+        #     x, y = x_raw, y_raw
 
         # Optional EMA smoothing on top
         if self.prev is None or self.ema_alpha >= 0.999:
