@@ -157,17 +157,25 @@ class CalibrationRunner:
             elif key == ord('r') or key == ord('R'):
                 return "redo"
 
-    def run_calibration(self, method: str = "hsv") -> bool:
+    def run_calibration(self, method: str = "hsv", initial_matrix: np.ndarray = None) -> bool:
         """
         Run calibration routine.
 
         Args:
             method: Tracking method to use ("mp" or "hsv")
+            initial_matrix: Optional initial calibration matrix to refine
 
         Returns:
-            True if calibration succeeded, False otherwise
+            True if calibration succeeded, False otherwise, or "redo" to refine
         """
         cfg = self.cfg
+
+        # Track if we're refining an existing calibration
+        is_refinement = initial_matrix is not None
+        if is_refinement:
+            print("\n[Calibration] REFINEMENT MODE - Using existing calibration as baseline")
+            print("Existing matrix:")
+            print(initial_matrix)
 
         # Initialize camera
         print("\n=== Starting Calibration ===")
