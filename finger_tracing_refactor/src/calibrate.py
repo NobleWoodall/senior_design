@@ -157,6 +157,293 @@ class CalibrationRunner:
             elif key == ord('r') or key == ord('R'):
                 return "redo"
 
+    def run_calibration_stationary(self, method: str = "hsv", initial_matrix: np.ndarray = None) -> bool:
+        """
+        Run STATIONARY calibration routine - no movement lag!
+
+        Shows dots at fixed positions, user positions LED and presses SPACE.
+        This eliminates movement-based lag from being baked into calibration.
+
+        Args:
+            method: Tracking method to use ("mp" or "hsv")
+            initial_matrix: Optional initial calibration matrix to refine
+
+        Returns:
+            True if calibration succeeded, False otherwise, or "redo" to refine
+        """
+        cfg = self.cfg
+
+        # Track if we're refining an existing calibration
+        is_refinement = initial_matrix is not None
+        if is_refinement:
+            print("\n[Calibration] REFINEMENT MODE - Using existing calibration as baseline")
+            print("Existing matrix:")
+            print(initial_matrix)
+
+        # Initialize camera
+        print("\n=== Starting STATIONARY Calibration ===")
+        print(f"Tracking method: {method.upper()}")
+
+        rsio = RealSenseIO(
+            cfg.camera.width, cfg.camera.height, cfg.camera.fps,
+            cfg.camera.depth_width, cfg.camera.depth_height, cfg.camera.depth_fps,
+            cfg.camera.use_auto_exposure, cfg.camera.exposure
+        )
+        rsio.start()
+
+        # Initialize tracker
+        if method == "mp":
+            tracker = MediaPipeTracker(
+                cfg.mediapipe.model_complexity,
+                cfg.mediapipe.detection_confidence,
+                cfg.mediapipe.tracking_confidence,
+                cfg.mediapipe.ema_alpha
+            )
+        elif method == "hsv":
+            tracker = LEDTracker(
+                tuple(cfg.led.hsv_low),
+                tuple(cfg.led.hsv_high),
+                cfg.led.brightness_threshold,
+                cfg.led.morph_kernel,
+                cfg.led.min_area
+            )
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+        # Create spiral
+        spiral = Spiral3D(
+            cfg.spiral.a, cfg.spiral.b,
+            cfg.spiral.turns, cfg.spiral.theta_step,
+            target_depth_m=cfg.stereo_3d.target_depth_m,
+            disparity_offset_px=cfg.stereo_3d.disparity_offset_px
+        )
+
+        # Get camera frame to determine scaling
+        color0, _, _ = rsio.get_aligned()
+        if color0 is None:
+            print("[Calibration] Error: Failed to read from camera")
+            rsio.stop()
+            return False
+
+        cam_h, cam_w = color0.shape[:2]
+        scale_x = self.EYE_WIDTH / cam_w
+        scale_y = self.EYE_HEIGHT / cam_h
+
+        print(f"\nCamera: {cam_w}x{cam_h}")
+        print(f"Display: {self.FULL_WIDTH}x{self.FULL_HEIGHT} (side-by-side)")
+        print(f"Scale: {scale_x:.2f}x, {scale_y:.2f}y")
+
+        # Generate calibration points distributed around spiral
+        num_points = 12  # Increased from your moving trace
+        calibration_points = self._generate_calibration_points(spiral, num_points)
+
+        print(f"\n=== Calibration Points: {num_points} ===")
+        print("For each point:")
+        print("  1. Position your LED on the YELLOW dot")
+        print("  2. Press SPACE when aligned")
+        print("  3. Move to next point")
+        print("\nPress ESC to cancel at any time")
+
+        # Data collection
+        src_points = []  # Detected finger positions (camera coords)
+        dst_points = []  # Ground truth dot positions (camera coords)
+
+        try:
+            # Create window
+            cv2.namedWindow("Calibration_Stationary", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Calibration_Stationary", self.FULL_WIDTH, self.FULL_HEIGHT)
+            print("\nDrag window to XReal display and press 'f' for fullscreen")
+
+            current_point_idx = 0
+
+            while current_point_idx < len(calibration_points):
+                color, _, t_now = rsio.get_aligned()
+                if color is None:
+                    continue
+
+                # Render spiral
+                view = spiral.draw_stereo(
+                    color_bgr=tuple(cfg.spiral.color_bgr),
+                    thickness=cfg.spiral.line_thickness
+                )
+
+                # Get current target point
+                dot_x, dot_y = calibration_points[current_point_idx]
+
+                # Draw target dot (YELLOW)
+                spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=20)
+
+                # Track finger/LED
+                pt = tracker.track(color)
+
+                if pt is not None:
+                    x_cam_original, y_cam_original = pt
+                    x_cam, y_cam = pt
+
+                    # Apply existing calibration if refining (for visualization only)
+                    if initial_matrix is not None:
+                        x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
+
+                    # Scale to display coordinates
+                    x_display = x_cam * scale_x
+                    y_display = y_cam * scale_y
+
+                    # Draw tracked finger position (PURPLE)
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
+
+                    # Calculate error
+                    error_px = math.hypot(x_display - dot_x, y_display - dot_y)
+
+                    # Status
+                    self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - Error: {error_px:.1f}px", (0, 255, 0), 40)
+                    self._draw_stereo_text(view, "Position LED on YELLOW dot, then press SPACE", (200, 200, 200), 80)
+                    self._draw_stereo_text(view, "Yellow=Target | Purple=Your LED", (200, 200, 200), 120)
+                else:
+                    # No tracking
+                    self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - NO TRACKING", (0, 0, 255), 40)
+                    self._draw_stereo_text(view, "Make LED visible, then press SPACE", (200, 200, 200), 80)
+
+                cv2.imshow("Calibration_Stationary", view)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27:  # ESC
+                    print("\n[Calibration] Cancelled by user")
+                    cv2.destroyAllWindows()
+                    rsio.stop()
+                    if method == "mp":
+                        tracker.close()
+                    return False
+                elif key == ord(' '):  # SPACE - record point
+                    if pt is not None:
+                        # Convert dot position to camera coords
+                        dot_x_cam = dot_x / scale_x
+                        dot_y_cam = dot_y / scale_y
+
+                        # Store pairing (use original raw position)
+                        if initial_matrix is not None:
+                            src_points.append((x_cam_original, y_cam_original))
+                        else:
+                            src_points.append((x_cam_original, y_cam_original))
+                        dst_points.append((dot_x_cam, dot_y_cam))
+
+                        print(f"  Point {current_point_idx + 1} recorded - Error: {error_px:.1f}px")
+                        current_point_idx += 1
+                    else:
+                        print("  [!] No tracking detected - try again")
+                elif key == ord('f'):
+                    cv2.setWindowProperty("Calibration_Stationary", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+            # Compute calibration
+            print(f"\n=== COMPUTING CALIBRATION ===")
+            print(f"Points collected: {len(src_points)}")
+
+            if len(src_points) < 3:
+                print(f"[Calibration] Error: Not enough points (need at least 3, got {len(src_points)})")
+                cv2.destroyAllWindows()
+                rsio.stop()
+                if method == "mp":
+                    tracker.close()
+                return False
+
+            # Compute calibration matrix (no train/test split for stationary - all data is good)
+            matrix = compute_calibration(src_points, dst_points, use_ransac=True)
+
+            if matrix is None:
+                print("[Calibration] Failed to compute calibration matrix")
+                cv2.destroyAllWindows()
+                rsio.stop()
+                if method == "mp":
+                    tracker.close()
+                return False
+
+            # Validate
+            validation_results = validate_calibration(matrix, src_points, dst_points)
+            print(f"\n=== VALIDATION ===")
+            print(f"Mean error: {validation_results['mean_error_px']:.2f} px")
+            print(f"Median error: {validation_results['median_error_px']:.2f} px")
+            print(f"Max error: {validation_results['max_error_px']:.2f} px")
+
+            # Test calibration mode
+            test_result = self.test_calibration(rsio, spiral, tracker, matrix, scale_x, scale_y)
+
+            # Cleanup resources
+            cv2.destroyAllWindows()
+            rsio.stop()
+            if method == "mp":
+                tracker.close()
+
+            if test_result == "keep":
+                # Save calibration
+                output_dir = cfg.experiment.output_dir
+                print(f"\n[DEBUG] Saving calibration...")
+                print(f"  output_dir from config: {output_dir}")
+
+                if not os.path.isabs(output_dir):
+                    output_dir = os.path.abspath(output_dir)
+                    print(f"  Converted to absolute path: {output_dir}")
+
+                os.makedirs(output_dir, exist_ok=True)
+                calibration_file = os.path.join(output_dir, cfg.calibration.calibration_file)
+
+                print(f"  Full path: {calibration_file}")
+                save_calibration(matrix, calibration_file)
+
+                if os.path.exists(calibration_file):
+                    print(f"  ✓ File verified: {calibration_file}")
+                else:
+                    print(f"  ✗ ERROR: File was not created!")
+
+                print(f"\n=== CALIBRATION COMPLETE ===")
+                print(f"Calibration saved to: {calibration_file}")
+                return True
+            elif test_result == "redo":
+                print("\n[Calibration] User chose to redo calibration")
+                return "redo"
+            else:
+                print("\n[Calibration] Cancelled by user during test")
+                return False
+
+        except Exception as e:
+            print(f"\n[Calibration] Error: {e}")
+            import traceback
+            traceback.print_exc()
+
+            try:
+                cv2.destroyAllWindows()
+                rsio.stop()
+                if method == "mp":
+                    tracker.close()
+            except:
+                pass
+
+            return False
+
+    def _generate_calibration_points(self, spiral: Spiral3D, num_points: int):
+        """Generate evenly distributed points around the spiral for stationary calibration."""
+        points = []
+        total_points = len(spiral.spiral_points)
+
+        # Distribute points evenly along spiral
+        for i in range(num_points):
+            # Skip very beginning and very end
+            progress = (i + 1) / (num_points + 1)
+            idx = int(progress * total_points)
+            idx = max(0, min(idx, total_points - 1))
+
+            # Get spiral point in relative coordinates
+            x_rel = spiral.spiral_points[idx, 0]
+            y_rel = spiral.spiral_points[idx, 1]
+
+            # Transform to display coordinates
+            cx = self.EYE_WIDTH / 2.0
+            cy = self.EYE_HEIGHT / 2.0
+            x = x_rel + cx
+            y = y_rel + cy
+
+            points.append((x, y))
+
+        return points
+
     def run_calibration(self, method: str = "hsv", initial_matrix: np.ndarray = None) -> bool:
         """
         Run calibration routine.

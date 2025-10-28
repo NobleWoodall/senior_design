@@ -78,7 +78,8 @@ def main():
             print(current_matrix)
             print()
 
-        result = runner.run_calibration(method=args.method, initial_matrix=current_matrix)
+        # Use stationary calibration (no movement lag!)
+        result = runner.run_calibration_stationary(method=args.method, initial_matrix=current_matrix)
 
         if result == True:
             # User pressed K (keep) - load the newly saved matrix
