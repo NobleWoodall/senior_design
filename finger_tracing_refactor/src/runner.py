@@ -143,9 +143,8 @@ class ExperimentRunner:
                 st = dwell.update(t_now, d_start, d_end)
                 started = started or st.recording
 
-                # Draw 3D finger dot at spiral depth (so it appears on the spiral plane)
-                spiral.draw_point_3d(view, x, y, spiral.target_depth_m * 1000.0,
-                                    color=(255, 0, 255), radius=5)
+                # Draw finger dot at same spiral-relative position on both eyes
+                spiral.draw_point_on_spiral(view, x, y, color=(255, 0, 255), radius=5)
 
                 # Draw status and circles on both eyes
                 if not started:

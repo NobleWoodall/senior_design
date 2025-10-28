@@ -12,8 +12,8 @@ camera:
   max_depth_mm: 800
 
 spiral:
-  a: 12.0
-  b: 8.0
+  a: 20.0
+  b: 30.0
   turns: 2
   theta_step: 0.01
   line_thickness: 5

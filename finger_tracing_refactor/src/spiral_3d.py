@@ -124,6 +124,43 @@ class Spiral3D:
             cv2.circle(sbs_frame, (x_right, y_pos), radius + 4, color, 2)
             cv2.circle(sbs_frame, (x_right, y_pos), radius, color, -1)
 
+    def draw_point_on_spiral(self, sbs_frame: np.ndarray, x: float, y: float,
+                            color: Tuple[int, int, int] = (255, 0, 255), radius: int = 5):
+        """
+        Draw a point at the same spiral-relative position on both eyes.
+        Uses the same transformation as the spiral itself, so the point appears
+        at the correct position relative to each spiral.
+
+        Args:
+            sbs_frame: 3840x1080 side-by-side frame to draw on
+            x, y: Position in display coordinates (1920x1080 space)
+            color: Point color (BGR)
+            radius: Point radius
+        """
+        # Convert to spiral-relative coordinates
+        cx = self.EYE_WIDTH / 2.0
+        cy = self.EYE_HEIGHT / 2.0
+        x_rel = x - cx
+        y_rel = y - cy
+
+        # Draw on both eyes using same transformation as spiral
+        for eye, shift_sign in [("L", -1), ("R", 1)]:
+            shift_x = shift_sign * self.disparity_px / 2.0
+            center_x = self.EYE_WIDTH / 2.0 + shift_x
+            center_y = self.EYE_HEIGHT / 2.0
+
+            # Offset for right eye in SBS frame
+            x_offset = 0 if eye == "L" else self.EYE_WIDTH
+
+            # Transform point to this eye's coordinate system
+            x_eye = int(x_rel + center_x + x_offset)
+            y_eye = int(y_rel + center_y)
+
+            # Draw if within bounds
+            if x_offset <= x_eye < x_offset + self.EYE_WIDTH and 0 <= y_eye < self.EYE_HEIGHT:
+                cv2.circle(sbs_frame, (x_eye, y_eye), radius + 4, color, 2)
+                cv2.circle(sbs_frame, (x_eye, y_eye), radius, color, -1)
+
     def nearest_point(self, x: float, y: float) -> Tuple[float, float, float, float]:
         """
         Find nearest spiral point.
