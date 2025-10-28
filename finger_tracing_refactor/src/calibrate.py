@@ -167,17 +167,25 @@ class CalibrationRunner:
             elif key == ord('r') or key == ord('R'):
                 return "redo"
 
-    def run_calibration(self, method: str = "hsv") -> bool:
+    def run_calibration(self, method: str = "hsv", initial_matrix: np.ndarray = None) -> bool:
         """
         Run calibration routine.
 
         Args:
             method: Tracking method to use ("mp" or "hsv")
+            initial_matrix: Optional initial calibration matrix to refine
 
         Returns:
-            True if calibration succeeded, False otherwise
+            True if calibration succeeded, False otherwise, or "redo" to refine
         """
         cfg = self.cfg
+
+        # Track if we're refining an existing calibration
+        is_refinement = initial_matrix is not None
+        if is_refinement:
+            print("\n[Calibration] REFINEMENT MODE - Using existing calibration as baseline")
+            print("Existing matrix:")
+            print(initial_matrix)
 
         # Initialize camera
         print("\n=== Starting Calibration ===")
@@ -259,7 +267,11 @@ class CalibrationRunner:
 
             # Preview phase - show starting position
             print(f"\n=== PREVIEW PHASE ===")
-            print("Position yourself to see the starting dot (center of spiral)")
+            if is_refinement:
+                print("Refinement mode: The purple dot shows your position WITH current calibration applied")
+                print("Position yourself at the starting dot (center of spiral)")
+            else:
+                print("Position yourself to see the starting dot (center of spiral)")
             print("Press SPACE when ready to start countdown, or ESC to cancel")
 
             preview_ready = False
@@ -281,10 +293,19 @@ class CalibrationRunner:
                 pt = tracker.track(color)
                 if pt is not None:
                     x_cam, y_cam = pt
+
+                    # Apply existing calibration if refining
+                    if initial_matrix is not None:
+                        x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
+
                     x_display = x_cam * scale_x
                     y_display = y_cam * scale_y
                     spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
-                    self._draw_stereo_text(view, "PREVIEW - Your finger is visible", (0, 255, 0), 40)
+
+                    status = "PREVIEW - Your finger is visible"
+                    if initial_matrix is not None:
+                        status += " (with current calibration)"
+                    self._draw_stereo_text(view, status, (0, 255, 0), 40)
                 else:
                     self._draw_stereo_text(view, "PREVIEW - No tracking", (0, 0, 255), 40)
 
@@ -393,7 +414,12 @@ class CalibrationRunner:
 
                 # Collect data if tracking successful
                 if pt is not None:
+                    x_cam_original, y_cam_original = pt  # Store original for calibration data collection
                     x_cam, y_cam = pt
+
+                    # Apply existing calibration if refining
+                    if initial_matrix is not None:
+                        x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
 
                     # Scale to display coordinates for visualization
                     x_display = x_cam * scale_x
@@ -410,7 +436,9 @@ class CalibrationRunner:
                     dot_x_cam = dot_x / scale_x
                     dot_y_cam = dot_y / scale_y
 
-                    src_points.append((x_cam, y_cam))
+                    # For refinement, use original raw position as source
+                    # so we can compose the matrices later
+                    src_points.append((x_cam_original, y_cam_original) if initial_matrix is not None else (x_cam, y_cam))
                     dst_points.append((dot_x_cam, dot_y_cam))
                     tracked_count += 1
 
