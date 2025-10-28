@@ -47,11 +47,11 @@ color:
 led:
   # LED tracking settings (combined red HSV + brightness)
   # Filters out white ceiling lights by requiring BOTH red AND bright
-  hsv_low: [0, 60, 160]      # H: red hue, S: moderate saturation, V: bright
-  hsv_high: [110, 255, 255]  # Wider hue range to catch all reds
-  brightness_threshold: 110  # Minimum brightness (0-255)
+  hsv_low: [0, 100, 150]     # H: red hue, S: high saturation, V: bright
+  hsv_high: [20, 255, 255]   # Narrow hue range for pure red (0-20 degrees)
+  brightness_threshold: 20  # Minimum brightness (0-255) - strict
   morph_kernel: 3
-  min_area: 5
+  min_area: 20               # Minimum blob area to filter noise
 
 experiment:
   methods_order: ["mp", "hsv"]  # "hsv" now uses LED tracking (red + brightness)
@@ -67,6 +67,6 @@ tremor_analysis:
 
 stereo_3d:
   target_depth_m: 0.5        # Spiral perceived depth in meters for XReal glasses
-  disparity_offset_px: 0     # Manual disparity adjustment (+ closer, - farther)
+  disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
 
 show_live_preview: true
