@@ -69,6 +69,94 @@ class CalibrationRunner:
 
         return x, y
 
+    def test_calibration(self, rsio: RealSenseIO, spiral: Spiral3D, tracker,
+                        calibration_matrix: np.ndarray, scale_x: float, scale_y: float) -> str:
+        """
+        Test calibration by showing tracked position with calibration applied.
+        User can trace the spiral and see if calibration improves accuracy.
+
+        Returns:
+            "keep" to keep calibration, "redo" to redo, "cancel" to abort
+        """
+        print("\n=== TEST CALIBRATION ===")
+        print("Trace the spiral to see if calibration is accurate")
+        print("Controls:")
+        print("  K = Keep this calibration and finish")
+        print("  R = Redo calibration")
+        print("  ESC = Cancel and exit")
+
+        MAX_JUMP_PX = int(self.cfg.experiment.max_jump_px)
+        last_xy = None
+
+        while True:
+            color, _, t_now = rsio.get_aligned()
+            if color is None:
+                continue
+
+            view = spiral.draw_stereo(
+                color_bgr=tuple(self.cfg.spiral.color_bgr),
+                thickness=self.cfg.spiral.line_thickness
+            )
+
+            # Track finger/LED
+            pt = tracker.track(color)
+
+            # Apply jump gate (camera coordinates)
+            if pt is not None:
+                x_cam, y_cam = pt
+                if last_xy is not None:
+                    dx = x_cam - last_xy[0]
+                    dy = y_cam - last_xy[1]
+                    if (dx*dx + dy*dy)**0.5 > MAX_JUMP_PX:
+                        pt = None
+                if pt is not None:
+                    last_xy = (x_cam, y_cam)
+            else:
+                last_xy = None
+
+            if pt is not None:
+                x_cam, y_cam = pt
+
+                # Apply calibration transform
+                x_cam_cal, y_cam_cal = apply_calibration(calibration_matrix, x_cam, y_cam)
+
+                # Scale to display coordinates
+                x = x_cam_cal * scale_x
+                y = y_cam_cal * scale_y
+
+                # Apply FOV adjustment scaling
+                cx = self.EYE_WIDTH / 2.0
+                cy = self.EYE_HEIGHT / 2.0
+                x = cx + (x - cx) * self.cfg.stereo_3d.finger_scale_x
+                y = cy + (y - cy) * self.cfg.stereo_3d.finger_scale_y
+
+                # Find nearest spiral point to show error
+                xs, ys, s_sp, _ = spiral.nearest_point(x, y)
+                err = math.hypot(x - xs, y - ys)
+
+                # Draw calibrated finger position
+                spiral.draw_point_on_spiral(view, x, y, color=(255, 0, 255), radius=20)
+
+                # Draw nearest spiral point
+                spiral.draw_point_on_spiral(view, xs, ys, color=(0, 255, 0), radius=8)
+
+                self._draw_stereo_text(view, f"TEST MODE - Error: {err:.1f}px", (0, 255, 255), 40)
+                self._draw_stereo_text(view, "Purple = Your finger | Green = Nearest spiral point", (200, 200, 200), 80)
+            else:
+                self._draw_stereo_text(view, "TEST MODE - No tracking", (0, 0, 255), 40)
+
+            self._draw_stereo_text(view, "K=Keep | R=Redo | ESC=Cancel", (200, 200, 200), 120)
+
+            cv2.imshow("Calibration", view)
+
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27:  # ESC
+                return "cancel"
+            elif key == ord('k') or key == ord('K'):
+                return "keep"
+            elif key == ord('r') or key == ord('R'):
+                return "redo"
+
     def run_calibration(self, method: str = "hsv") -> bool:
         """
         Run calibration routine.
@@ -159,8 +247,56 @@ class CalibrationRunner:
             cv2.resizeWindow("Calibration", self.FULL_WIDTH, self.FULL_HEIGHT)
             print("\nDrag window to XReal display and press 'f' for fullscreen")
 
+            # Preview phase - show starting position
+            print(f"\n=== PREVIEW PHASE ===")
+            print("Position yourself to see the starting dot (center of spiral)")
+            print("Press SPACE when ready to start countdown, or ESC to cancel")
+
+            preview_ready = False
+            while not preview_ready:
+                color, _, t_now = rsio.get_aligned()
+                if color is None:
+                    continue
+
+                view = spiral.draw_stereo(
+                    color_bgr=tuple(cfg.spiral.color_bgr),
+                    thickness=cfg.spiral.line_thickness
+                )
+
+                # Show starting dot position (t=0)
+                dot_x, dot_y = self._get_dot_position_at_time(spiral, 0.0, revolutions_per_sec)
+                spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=15)
+
+                # Track and show current finger position
+                pt = tracker.track(color)
+                if pt is not None:
+                    x_cam, y_cam = pt
+                    x_display = x_cam * scale_x
+                    y_display = y_cam * scale_y
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
+                    self._draw_stereo_text(view, "PREVIEW - Your finger is visible", (0, 255, 0), 40)
+                else:
+                    self._draw_stereo_text(view, "PREVIEW - No tracking", (0, 0, 255), 40)
+
+                self._draw_stereo_text(view, "Yellow dot = Starting position", (200, 200, 200), 80)
+                self._draw_stereo_text(view, "Press SPACE to start | ESC to cancel | F for fullscreen", (200, 200, 200), 120)
+
+                cv2.imshow("Calibration", view)
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27:  # ESC to cancel
+                    print("\n[Calibration] Cancelled by user")
+                    rsio.stop()
+                    if method == "mp":
+                        tracker.close()
+                    cv2.destroyAllWindows()
+                    return False
+                elif key == ord(' '):  # SPACE to continue
+                    preview_ready = True
+                elif key == ord('f'):
+                    cv2.setWindowProperty("Calibration", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
             # Countdown phase
-            print(f"\nStarting countdown...")
+            print(f"\n=== COUNTDOWN PHASE ===")
             countdown_start = time.time()
 
             while True:
@@ -181,6 +317,10 @@ class CalibrationRunner:
                     self._draw_stereo_text(view, text, (0, 255, 255), 40)
                     self._draw_stereo_text(view, "Trace the moving dot with your finger/LED", (200, 200, 200), 80)
                     self._draw_stereo_text(view, f"Duration: {trace_duration:.0f}s | Traces: {num_traces}", (200, 200, 200), 120)
+
+                    # Show starting dot during countdown
+                    dot_x, dot_y = self._get_dot_position_at_time(spiral, 0.0, revolutions_per_sec)
+                    spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=15)
                 else:
                     break
 
@@ -282,12 +422,6 @@ class CalibrationRunner:
 
                 frame_count += 1
 
-            # Cleanup
-            cv2.destroyAllWindows()
-            rsio.stop()
-            if method == "mp":
-                tracker.close()
-
             # Compute calibration
             print(f"\n=== COMPUTING CALIBRATION ===")
             print(f"Total frames: {frame_count}")
@@ -296,6 +430,11 @@ class CalibrationRunner:
             if len(src_points) < 10:
                 print(f"[Calibration] Error: Not enough points collected (need at least 10, got {len(src_points)})")
                 print("Try again with better tracking or slower dot speed")
+                # Cleanup
+                cv2.destroyAllWindows()
+                rsio.stop()
+                if method == "mp":
+                    tracker.close()
                 return False
 
             # Split data into train and test sets (80/20)
@@ -310,6 +449,11 @@ class CalibrationRunner:
 
             if matrix is None:
                 print("[Calibration] Failed to compute calibration matrix")
+                # Cleanup
+                cv2.destroyAllWindows()
+                rsio.stop()
+                if method == "mp":
+                    tracker.close()
                 return False
 
             # Validate on test set
@@ -323,22 +467,38 @@ class CalibrationRunner:
 
                 if validation_results['mean_error_px'] > 50:
                     print("\n[Calibration] Warning: High validation error - calibration may be poor")
-                    print("Consider re-running calibration with more careful tracing")
+                    print("Consider testing and potentially redoing calibration")
 
-            # Save calibration
-            output_dir = cfg.experiment.output_dir
-            os.makedirs(output_dir, exist_ok=True)
-            calibration_file = os.path.join(output_dir, cfg.calibration.calibration_file)
+            # Test calibration mode - let user decide to keep or redo
+            test_result = self.test_calibration(rsio, spiral, tracker, matrix, scale_x, scale_y)
 
-            save_calibration(matrix, calibration_file)
+            # Cleanup resources
+            cv2.destroyAllWindows()
+            rsio.stop()
+            if method == "mp":
+                tracker.close()
 
-            print(f"\n=== CALIBRATION COMPLETE ===")
-            print(f"Calibration saved to: {calibration_file}")
-            print(f"Enable calibration in config.yaml:")
-            print(f"  calibration:")
-            print(f"    enabled: true")
+            if test_result == "keep":
+                # Save calibration
+                output_dir = cfg.experiment.output_dir
+                os.makedirs(output_dir, exist_ok=True)
+                calibration_file = os.path.join(output_dir, cfg.calibration.calibration_file)
 
-            return True
+                save_calibration(matrix, calibration_file)
+
+                print(f"\n=== CALIBRATION COMPLETE ===")
+                print(f"Calibration saved to: {calibration_file}")
+                print(f"Enable calibration in config.yaml:")
+                print(f"  calibration:")
+                print(f"    enabled: true")
+
+                return True
+            elif test_result == "redo":
+                print("\n[Calibration] User chose to redo calibration")
+                return "redo"  # Signal to redo
+            else:  # cancel
+                print("\n[Calibration] Cancelled by user during test")
+                return False
 
         except Exception as e:
             print(f"\n[Calibration] Error: {e}")

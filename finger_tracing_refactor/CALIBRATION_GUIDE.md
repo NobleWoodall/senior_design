@@ -27,15 +27,35 @@ py -m calibrate_main --config ../config.yaml --method hsv
 
 ### Step 2: Follow Instructions
 
-1. Window opens showing the spiral with countdown
-2. When countdown reaches 0, a **yellow dot** appears and starts moving
-3. **Trace the yellow dot** with your finger/LED for the entire duration
-4. Keep your finger/LED visible at all times
-5. System collects data and computes calibration
+**Preview Phase:**
+1. Window opens showing the spiral with a **yellow dot** at the center (starting position)
+2. Position yourself so you can reach the starting point comfortably
+3. You'll see your finger/LED tracked in real-time (purple dot)
+4. Press **SPACE** when ready to begin
 
-### Step 3: Enable Calibration
+**Countdown Phase:**
+5. 3-second countdown begins
+6. Get your finger/LED positioned at the starting dot
 
-After successful calibration, edit `config.yaml`:
+**Calibration Phase:**
+7. Yellow dot starts moving around the spiral
+8. **Trace the yellow dot** (not the spiral!) with your finger/LED
+9. Keep your finger/LED visible at all times
+10. System collects data for 2 complete traces (configurable)
+
+**Test Phase:**
+11. After calibration is computed, you enter TEST MODE
+12. Trace the spiral freely to see how accurate the calibration is
+13. Purple dot = your calibrated position
+14. Green dot = nearest point on spiral
+15. Error in pixels is shown at the top
+16. **Press K to Keep** the calibration and finish
+17. **Press R to Redo** the calibration if you're not satisfied
+18. **Press ESC to Cancel** and exit
+
+### Step 3: Enable Calibration (if you kept it)
+
+The calibration is automatically saved when you press K. Now edit `config.yaml`:
 
 ```yaml
 calibration:
@@ -186,10 +206,21 @@ py -m src.main --config ../config.yaml
 # 5. Check if accuracy improved!
 ```
 
-## Keyboard Controls During Calibration
+## Keyboard Controls
 
+**Preview Phase:**
+- **SPACE**: Start countdown and begin calibration
+- **ESC**: Cancel and exit
+- **F**: Toggle fullscreen mode
+
+**Countdown/Calibration Phase:**
 - **ESC**: Cancel calibration
-- **f**: Toggle fullscreen mode
+- **F**: Toggle fullscreen mode
+
+**Test Phase:**
+- **K**: Keep this calibration and save it
+- **R**: Redo calibration from the beginning
+- **ESC**: Cancel and exit without saving
 
 ## Need Help?
 

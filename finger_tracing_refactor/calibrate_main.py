@@ -53,30 +53,55 @@ def main():
     print("\n" + "="*60 + "\n")
 
     runner = CalibrationRunner(cfg)
-    success = runner.run_calibration(method=args.method)
 
-    if success:
-        print("\n" + "="*60)
-        print("SUCCESS: Calibration complete!")
-        print("="*60)
-        print("\nNext steps:")
-        print("  1. Enable calibration in config.yaml:")
-        print("       calibration:")
-        print("         enabled: true")
-        print("  2. Run experiments as normal - calibration will be applied automatically")
-        print("\n" + "="*60 + "\n")
-        sys.exit(0)
-    else:
-        print("\n" + "="*60)
-        print("FAILED: Calibration did not complete")
-        print("="*60)
-        print("\nTroubleshooting:")
-        print("  - Ensure your finger/LED is clearly visible")
-        print("  - Check camera exposure and tracking settings")
-        print("  - Try slower dot speed in config.yaml")
-        print("  - Ensure good lighting conditions")
-        print("\n" + "="*60 + "\n")
-        sys.exit(1)
+    # Loop to allow redoing calibration
+    max_attempts = 10  # Prevent infinite loop
+    attempt = 1
+
+    while attempt <= max_attempts:
+        print(f"\n{'='*60}")
+        print(f"CALIBRATION ATTEMPT #{attempt}")
+        print(f"{'='*60}\n")
+
+        result = runner.run_calibration(method=args.method)
+
+        if result == True:
+            # User kept the calibration
+            print("\n" + "="*60)
+            print("SUCCESS: Calibration complete!")
+            print("="*60)
+            print("\nNext steps:")
+            print("  1. Enable calibration in config.yaml:")
+            print("       calibration:")
+            print("         enabled: true")
+            print("  2. Run experiments as normal - calibration will be applied automatically")
+            print("\n" + "="*60 + "\n")
+            sys.exit(0)
+        elif result == "redo":
+            # User wants to redo calibration
+            print(f"\nStarting calibration attempt #{attempt + 1}...")
+            attempt += 1
+            continue
+        else:
+            # User cancelled or error occurred
+            print("\n" + "="*60)
+            print("CANCELLED: Calibration did not complete")
+            print("="*60)
+            print("\nTroubleshooting:")
+            print("  - Ensure your finger/LED is clearly visible")
+            print("  - Check camera exposure and tracking settings")
+            print("  - Try slower dot speed in config.yaml")
+            print("  - Ensure good lighting conditions")
+            print("\n" + "="*60 + "\n")
+            sys.exit(1)
+
+    # Too many attempts
+    print("\n" + "="*60)
+    print(f"ERROR: Maximum attempts ({max_attempts}) reached")
+    print("="*60)
+    print("\nPlease check your setup and try again later")
+    print("\n" + "="*60 + "\n")
+    sys.exit(1)
 
 
 if __name__ == "__main__":
