@@ -80,6 +80,8 @@ class Stereo3DCfg:
     disparity_offset_px:float=0.0
     flip_x:bool=False
     flip_y:bool=False
+    finger_scale_x:float=1.0
+    finger_scale_y:float=1.0
 
 @dataclass
 class AppConfig:

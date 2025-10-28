@@ -70,5 +70,7 @@ stereo_3d:
   disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
   flip_x: false              # Flip horizontal axis (for head-mounted camera)
   flip_y: false              # Flip vertical axis
+  finger_scale_x: 0.67       # Finger movement scale adjustment horizontal (FOV compensation)
+  finger_scale_y: 0.67       # Finger movement scale adjustment vertical
 
 show_live_preview: true

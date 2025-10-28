@@ -128,6 +128,12 @@ class ExperimentRunner:
                 x = x_cam * scale_x
                 y = y_cam * scale_y
 
+                # Apply FOV adjustment scaling (center-based for proportional movement)
+                cx = self.EYE_WIDTH / 2.0
+                cy = self.EYE_HEIGHT / 2.0
+                x = cx + (x - cx) * self.cfg.stereo_3d.finger_scale_x
+                y = cy + (y - cy) * self.cfg.stereo_3d.finger_scale_y
+
                 # Apply coordinate flipping for head-mounted camera
                 if self.cfg.stereo_3d.flip_x:
                     x = self.EYE_WIDTH - x
