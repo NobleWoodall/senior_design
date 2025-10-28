@@ -385,16 +385,16 @@ class CalibrationRunner:
                 # Track finger/LED
                 pt = tracker.track(color)
 
-                # Apply jump gate (camera coordinates)
+                # Apply jump gate (camera coordinates - use RAW position)
                 if pt is not None:
-                    x_cam, y_cam = pt
+                    x_cam_raw, y_cam_raw = pt
                     if last_xy is not None:
-                        dx = x_cam - last_xy[0]
-                        dy = y_cam - last_xy[1]
+                        dx = x_cam_raw - last_xy[0]
+                        dy = y_cam_raw - last_xy[1]
                         if (dx*dx + dy*dy)**0.5 > MAX_JUMP_PX:
                             pt = None
                     if pt is not None:
-                        last_xy = (x_cam, y_cam)
+                        last_xy = (x_cam_raw, y_cam_raw)  # Store RAW for next comparison
                 else:
                     last_xy = None
 
@@ -403,7 +403,7 @@ class CalibrationRunner:
                     x_cam_original, y_cam_original = pt  # Store original for calibration data collection
                     x_cam, y_cam = pt
 
-                    # Apply existing calibration if refining
+                    # Apply existing calibration if refining (ONLY for visualization)
                     if initial_matrix is not None:
                         x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
 
