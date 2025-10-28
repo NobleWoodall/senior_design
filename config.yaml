@@ -73,4 +73,11 @@ stereo_3d:
   finger_scale_x: 0.75      # FOV compensation (Display 46° / Camera 69° ≈ 0.67)
   finger_scale_y: 1       # FOV compensation vertical
 
+calibration:
+  enabled: true             # Enable/disable calibration transform
+  calibration_file: "calibration.json"  # Path to calibration file (relative to output_dir)
+  dot_speed_revolutions_per_sec: .1  # Speed of moving dot (lower = slower, easier to trace)
+  num_traces: 2              # Number of complete spiral traces for calibration
+  countdown_sec: 3           # Countdown duration before calibration starts
+
 show_live_preview: true

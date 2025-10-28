@@ -16,6 +16,7 @@ from .metrics import summarize_errors
 from .save import RunSaver
 from .signal_processing import analyze_after_runs
 from .results_display import display_results
+from .calibration_utils import load_calibration, apply_calibration
 
 class ExperimentRunner:
     # XReal glasses dimensions (3840x1080 side-by-side stereo)
@@ -26,6 +27,19 @@ class ExperimentRunner:
 
     def __init__(self, cfg:AppConfig):
         self.cfg = cfg
+        self.calibration_matrix = None
+
+        # Load calibration if enabled
+        if cfg.calibration.enabled:
+            calibration_path = os.path.join(cfg.experiment.output_dir, cfg.calibration.calibration_file)
+            self.calibration_matrix = load_calibration(calibration_path)
+            if self.calibration_matrix is None:
+                print(f"[Warning] Calibration enabled but failed to load from: {calibration_path}")
+                print("[Warning] Continuing without calibration")
+            else:
+                print(f"[Calibration] Loaded successfully")
+        else:
+            print("[Calibration] Disabled (set calibration.enabled=true in config to enable)")
 
     def _draw_stereo_text(self, frame: np.ndarray, text: str, color: tuple):
         """Draw text on both eyes of stereo frame."""
@@ -123,6 +137,10 @@ class ExperimentRunner:
 
             if pt is not None:
                 x_cam, y_cam = pt
+
+                # Apply calibration transform if available (camera coords -> camera coords)
+                if self.calibration_matrix is not None:
+                    x_cam, y_cam = apply_calibration(self.calibration_matrix, x_cam, y_cam)
 
                 # Scale to display coordinates
                 x = x_cam * scale_x
