@@ -73,6 +73,11 @@ def main():
         print(f"{'='*60}\n")
 
         # Run calibration (with current matrix if refining)
+        if current_matrix is not None:
+            print(f"\n[DEBUG] Passing calibration matrix to iteration {iteration}:")
+            print(current_matrix)
+            print()
+
         result = runner.run_calibration(method=args.method, initial_matrix=current_matrix)
 
         if result == True:

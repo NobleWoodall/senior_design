@@ -300,7 +300,7 @@ class CalibrationRunner:
 
                     x_display = x_cam * scale_x
                     y_display = y_cam * scale_y
-                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
 
                     status = "PREVIEW - Your finger is visible"
                     if initial_matrix is not None:
@@ -426,7 +426,7 @@ class CalibrationRunner:
                     y_display = y_cam * scale_y
 
                     # Draw tracked finger position (PURPLE/MAGENTA)
-                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
 
                     # Calculate and show error distance
                     error_px = math.hypot(x_display - dot_x, y_display - dot_y)
