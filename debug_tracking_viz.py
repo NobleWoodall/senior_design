@@ -182,7 +182,7 @@ def main():
                 cv2.circle(stereo_view, (1920//2, 1080//2), 10, (0, 255, 255), 2)  # Center dot
                 cv2.circle(stereo_view, (1920//2 + 1920, 1080//2), 10, (0, 255, 255), 2)  # Center dot (right eye)
 
-            # === COMBINE VIEWS SIDE-BY-SIDE ===
+            # === COMBINE VIEWS SIDE-BY-SIDE ==
             # Resize camera view to half width for comparison
             camera_view_resized = cv2.resize(camera_view, (960, 540))
             stereo_view_resized = cv2.resize(stereo_view, (1920, 540))
