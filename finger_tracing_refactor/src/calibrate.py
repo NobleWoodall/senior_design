@@ -526,10 +526,29 @@ class CalibrationRunner:
             if test_result == "keep":
                 # Save calibration
                 output_dir = cfg.experiment.output_dir
+                print(f"\n[DEBUG] Saving calibration...")
+                print(f"  output_dir from config: {output_dir}")
+                print(f"  calibration_file from config: {cfg.calibration.calibration_file}")
+
+                # Make absolute path
+                if not os.path.isabs(output_dir):
+                    output_dir = os.path.abspath(output_dir)
+                    print(f"  Converted to absolute path: {output_dir}")
+
                 os.makedirs(output_dir, exist_ok=True)
                 calibration_file = os.path.join(output_dir, cfg.calibration.calibration_file)
 
+                print(f"  Full path: {calibration_file}")
+                print(f"  Matrix to save:")
+                print(matrix)
+
                 save_calibration(matrix, calibration_file)
+
+                # Verify file was created
+                if os.path.exists(calibration_file):
+                    print(f"  ✓ File verified: {calibration_file}")
+                else:
+                    print(f"  ✗ ERROR: File was not created!")
 
                 print(f"\n=== CALIBRATION COMPLETE ===")
                 print(f"Calibration saved to: {calibration_file}")
