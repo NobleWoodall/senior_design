@@ -32,10 +32,27 @@ class ExperimentRunner:
         cv2.putText(frame, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
         cv2.putText(frame, text, (self.EYE_WIDTH + 20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
 
-    def _draw_stereo_circle(self, frame: np.ndarray, x: int, y: int, radius: int, color: tuple, thickness: int):
-        """Draw circle on both eyes of stereo frame."""
-        cv2.circle(frame, (x, y), radius, color, thickness)
-        cv2.circle(frame, (self.EYE_WIDTH + x, y), radius, color, thickness)
+    def _draw_stereo_circle(self, frame: np.ndarray, x: int, y: int, radius: int, color: tuple, thickness: int, disparity_px: float = 0.0):
+        """Draw circle on both eyes of stereo frame with stereo disparity.
+
+        Args:
+            frame: Stereo frame to draw on
+            x, y: Center position in display coordinates (1920x1080 space)
+            radius: Circle radius
+            color: Circle color (BGR)
+            thickness: Line thickness
+            disparity_px: Stereo disparity in pixels (for 3D depth)
+        """
+        # Left eye: shift left by half disparity
+        x_left = int(x - disparity_px / 2.0)
+        y_pos = int(y)
+        if 0 <= x_left < self.EYE_WIDTH and 0 <= y_pos < self.EYE_HEIGHT:
+            cv2.circle(frame, (x_left, y_pos), radius, color, thickness)
+
+        # Right eye: shift right by half disparity
+        x_right = int(x + disparity_px / 2.0 + self.EYE_WIDTH)
+        if self.EYE_WIDTH <= x_right < self.FULL_WIDTH and 0 <= y_pos < self.EYE_HEIGHT:
+            cv2.circle(frame, (x_right, y_pos), radius, color, thickness)
 
     def _run_single_trial(self, rsio:RealSenseIO, spiral:Spiral3D, saver:RunSaver,
                           method:str, tracker, depth_win:int, fps:int,
@@ -126,24 +143,20 @@ class ExperimentRunner:
                 st = dwell.update(t_now, d_start, d_end)
                 started = started or st.recording
 
-                # Draw 3D finger dot with depth-based disparity
-                if not math.isnan(z):
-                    spiral.draw_point_3d(view, x, y, z, color=(255, 0, 255), radius=5)
-                else:
-                    # No depth - draw at spiral depth
-                    spiral.draw_point_3d(view, x, y, spiral.target_depth_m * 1000.0,
-                                        color=(255, 128, 0), radius=5)
+                # Draw 3D finger dot at spiral depth (so it appears on the spiral plane)
+                spiral.draw_point_3d(view, x, y, spiral.target_depth_m * 1000.0,
+                                    color=(255, 0, 255), radius=5)
 
                 # Draw status and circles on both eyes
                 if not started:
                     self._draw_stereo_text(view, "STANDBY", (128, 128, 128))
-                    self._draw_stereo_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0, 255, 255), 2)
+                    self._draw_stereo_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0, 255, 255), 2, spiral.disparity_px)
                 elif started and not st.end_detected:
                     self._draw_stereo_text(view, "RECORDING", (0, 220, 0))
                 else:
                     self._draw_stereo_text(view, "END DETECTED", (255, 0, 0))
 
-                self._draw_stereo_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255, 0, 255), 1)
+                self._draw_stereo_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255, 0, 255), 1, spiral.disparity_px)
 
                 # Save data during recording (camera coordinates for analysis consistency)
                 if started and not st.end_detected:
@@ -166,10 +179,10 @@ class ExperimentRunner:
                 st = dwell.update(t_now, 1e9, 1e9)
                 if not started:
                     self._draw_stereo_text(view, "STANDBY (no track)", (128, 128, 128))
-                    self._draw_stereo_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0, 255, 255), 2)
+                    self._draw_stereo_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0, 255, 255), 2, spiral.disparity_px)
                 else:
                     self._draw_stereo_text(view, "RECORDING (no track)", (0, 165, 255))
-                    self._draw_stereo_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255, 0, 255), 1)
+                    self._draw_stereo_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255, 0, 255), 1, spiral.disparity_px)
 
             # Save and display
             if self.cfg.experiment.save_preview:
@@ -221,11 +234,11 @@ class ExperimentRunner:
         intr = rsio.get_intrinsics()
 
         # Create 3D stereo spiral
-        target_depth = getattr(cfg, 'stereo_3d', {}).get('target_depth_m', 0.5)
         spiral = Spiral3D(
             cfg.spiral.a, cfg.spiral.b,
             cfg.spiral.turns, cfg.spiral.theta_step,
-            target_depth_m=target_depth
+            target_depth_m=cfg.stereo_3d.target_depth_m,
+            disparity_offset_px=cfg.stereo_3d.disparity_offset_px
         )
 
         mp_tracker = MediaPipeTracker(cfg.mediapipe.model_complexity, cfg.mediapipe.detection_confidence,

@@ -20,7 +20,7 @@ class Spiral3D:
     IPD_MM = 63.0                # Inter-pupillary distance
     FOV_HORIZONTAL_DEG = 46.0    # Horizontal field of view
 
-    def __init__(self, a: float, b: float, turns: float, theta_step: float, target_depth_m: float = 0.5):
+    def __init__(self, a: float, b: float, turns: float, theta_step: float, target_depth_m: float = 0.5, disparity_offset_px: float = 0.0):
         """
         Initialize 3D stereoscopic spiral.
 
@@ -29,6 +29,7 @@ class Spiral3D:
             turns: Number of spiral turns
             theta_step: Angular step for spiral generation
             target_depth_m: Perceived depth in meters (default 0.5m)
+            disparity_offset_px: Manual disparity adjustment in pixels (default 0.0)
         """
         self.a = a
         self.b = b
@@ -38,12 +39,13 @@ class Spiral3D:
 
         # Calculate stereoscopic parameters
         self.focal_length_px = self.EYE_WIDTH / (2.0 * math.tan(math.radians(self.FOV_HORIZONTAL_DEG / 2.0)))
-        self.disparity_px = (self.IPD_MM * self.focal_length_px) / (self.target_depth_m * 1000.0)
+        base_disparity = (self.IPD_MM * self.focal_length_px) / (self.target_depth_m * 1000.0)
+        self.disparity_px = base_disparity + disparity_offset_px
 
         # Generate spiral
         self._generate_spiral()
 
-        print(f"[Spiral3D] Target depth: {self.target_depth_m}m, Disparity: {self.disparity_px:.1f}px")
+        print(f"[Spiral3D] Target depth: {self.target_depth_m}m, Base disparity: {base_disparity:.1f}px, Offset: {disparity_offset_px:.1f}px, Final: {self.disparity_px:.1f}px")
 
     def _generate_spiral(self):
         """Generate Archimedean spiral points."""
