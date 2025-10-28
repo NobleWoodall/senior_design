@@ -65,4 +65,7 @@ tremor_analysis:
   band_low_hz: 4.0           # lower bound of tremor frequency band
   band_high_hz: 10.0         # upper bound of tremor frequency band
 
+stereo_3d:
+  target_depth_m: 0.5        # Spiral perceived depth in meters for XReal glasses
+
 show_live_preview: true
