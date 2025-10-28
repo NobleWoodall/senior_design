@@ -17,7 +17,7 @@ from .io_rs import RealSenseIO
 from .spiral_3d import Spiral3D
 from .track_mp import MediaPipeTracker
 from .track_led import LEDTracker
-from .calibration_utils import compute_calibration, save_calibration, validate_calibration
+from .calibration_utils import compute_calibration, save_calibration, validate_calibration, apply_calibration
 
 
 class CalibrationRunner:
@@ -80,7 +80,9 @@ class CalibrationRunner:
         """
         print("\n=== TEST CALIBRATION ===")
         print("Trace the spiral to see if calibration is accurate")
-        print("Controls:")
+        print(f"\nUsing calibration matrix:")
+        print(calibration_matrix)
+        print("\nControls:")
         print("  K = Keep this calibration and finish")
         print("  R = Redo calibration")
         print("  ESC = Cancel and exit")
@@ -119,6 +121,14 @@ class CalibrationRunner:
 
                 # Apply calibration transform
                 x_cam_cal, y_cam_cal = apply_calibration(calibration_matrix, x_cam, y_cam)
+
+                # Debug: Print first frame transformation (only once)
+                if not hasattr(self, '_debug_printed'):
+                    print(f"\n[DEBUG] First frame transformation:")
+                    print(f"  Raw camera: ({x_cam:.1f}, {y_cam:.1f})")
+                    print(f"  After calibration: ({x_cam_cal:.1f}, {y_cam_cal:.1f})")
+                    print(f"  Offset: ({x_cam_cal - x_cam:.1f}, {y_cam_cal - y_cam:.1f})")
+                    self._debug_printed = True
 
                 # Scale to display coordinates
                 x = x_cam_cal * scale_x
@@ -362,7 +372,7 @@ class CalibrationRunner:
                 # Get dot position
                 dot_x, dot_y = self._get_dot_position_at_time(spiral, elapsed, revolutions_per_sec)
 
-                # Draw moving dot at spiral depth
+                # Draw moving target dot at spiral depth (YELLOW)
                 spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=15)
 
                 # Track finger/LED
@@ -389,8 +399,11 @@ class CalibrationRunner:
                     x_display = x_cam * scale_x
                     y_display = y_cam * scale_y
 
-                    # Draw tracked finger position
+                    # Draw tracked finger position (PURPLE/MAGENTA)
                     spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
+
+                    # Calculate and show error distance
+                    error_px = math.hypot(x_display - dot_x, y_display - dot_y)
 
                     # Store calibration pair (camera coords for src, camera coords for dst)
                     # Convert dot position from display back to camera coordinates
@@ -401,12 +414,16 @@ class CalibrationRunner:
                     dst_points.append((dot_x_cam, dot_y_cam))
                     tracked_count += 1
 
-                # Draw status
-                progress_pct = (elapsed / trace_duration) * 100
-                self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
-                self._draw_stereo_text(view, f"Points collected: {tracked_count}", (200, 200, 200), 80)
-
-                if pt is None:
+                    # Draw status with error feedback
+                    progress_pct = (elapsed / trace_duration) * 100
+                    self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
+                    self._draw_stereo_text(view, f"Points: {tracked_count} | Error: {error_px:.1f}px", (200, 200, 200), 80)
+                    self._draw_stereo_text(view, "Yellow=Target | Purple=Your Finger", (200, 200, 200), 120)
+                else:
+                    # Draw status without tracking
+                    progress_pct = (elapsed / trace_duration) * 100
+                    self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
+                    self._draw_stereo_text(view, f"Points: {tracked_count}", (200, 200, 200), 80)
                     self._draw_stereo_text(view, "NO TRACKING - Keep finger/LED visible", (0, 0, 255), 120)
 
                 cv2.imshow("Calibration", view)
