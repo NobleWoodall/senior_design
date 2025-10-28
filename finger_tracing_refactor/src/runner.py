@@ -150,7 +150,7 @@ class ExperimentRunner:
                 started = started or st.recording
 
                 # Draw finger dot at same spiral-relative position on both eyes
-                spiral.draw_point_on_spiral(view, x, y, color=(255, 0, 255), radius=5)
+                spiral.draw_point_on_spiral(view, x, y, color=(255, 0, 255), radius=10)
 
                 # Draw status and circles on both eyes
                 if not started:

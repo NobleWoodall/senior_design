@@ -12,11 +12,11 @@ camera:
   max_depth_mm: 800
 
 spiral:
-  a: 20.0
-  b: 30.0
+  a: 30.0
+  b: 40.0
   turns: 2
   theta_step: 0.01
-  line_thickness: 5
+  line_thickness: 20
   color_bgr: [40, 220, 40]
 
 dwell:
@@ -68,7 +68,7 @@ tremor_analysis:
 stereo_3d:
   target_depth_m: 0.5        # Spiral perceived depth in meters for XReal glasses
   disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
-  flip_x: true               # Flip horizontal axis (for head-mounted camera)
+  flip_x: false              # Flip horizontal axis (for head-mounted camera)
   flip_y: false              # Flip vertical axis
 
 show_live_preview: true
