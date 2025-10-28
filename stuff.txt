@@ -1,0 +1,750 @@
+# Mermaid Diagrams for 3D Stereoscopic Finger Tracking Presentation
+
+## 1. SYSTEM ARCHITECTURE DIAGRAM (Complete System)
+
+```mermaid
+graph TB
+    subgraph Glove["🧤 Smart Glove Module"]
+        ESP32["ESP32 MCU<br/>Dual-Core 240MHz<br/>BLE + GPIO + SPI"]
+        IMU1["IMU #1<br/>Thumb"]
+        IMU2["IMU #2<br/>Index"]
+        IMU3["IMU #3<br/>Middle"]
+        IMU4["IMU #4<br/>Ring"]
+        IMU5["IMU #5<br/>Pinky"]
+        LED["Red LED<br/>Fingertip Tracker<br/>High Brightness"]
+        BATT["LiPo Battery<br/>3.7V<br/>Power Supply"]
+    end
+
+    subgraph Vision["📷 Vision Tracking Hardware"]
+        RS["Intel RealSense D435/D455<br/>RGB: 640x480 @ 30fps<br/>Depth: 640x480 @ 30fps<br/>USB 3.0"]
+        XR["XReal AR Glasses<br/>3840x1080 SBS Display<br/>FOV: 46° / IPD: 63mm<br/>USB-C DisplayPort"]
+    end
+
+    subgraph Compute["💻 Host Computer Processing"]
+        BLE_RX["BLE Receiver<br/>IMU Data Stream"]
+        CAM["Camera Interface<br/>RealSenseIO<br/>Depth Alignment"]
+        TRACK["Tracking Module<br/>MediaPipe | LED<br/>Finger Detection"]
+        PROC["Processing Core<br/>ExperimentRunner<br/>Coordinate System"]
+        RENDER["3D Stereo Renderer<br/>Spiral3D<br/>Disparity Calc"]
+        SAVE["Data Pipeline<br/>CSV + JSON + Video"]
+    end
+
+    subgraph Output["📊 Outputs"]
+        DISP["Stereoscopic 3D View<br/>1920x1080 per eye<br/>Real-time @ 30fps"]
+        DATA["Experimental Data<br/>• Position tracking<br/>• Depth measurements<br/>• Error metrics<br/>• Tremor analysis"]
+    end
+
+    BATT -.->|Power 3.7V| ESP32
+    BATT -.->|Power| IMU1 & IMU2 & IMU3 & IMU4 & IMU5
+    BATT -.->|Power| LED
+    ESP32 -->|SPI Bus| IMU1 & IMU2 & IMU3 & IMU4 & IMU5
+    ESP32 -->|GPIO PWM| LED
+    ESP32 -.->|BLE Wireless| BLE_RX
+    LED -.->|Optical Signal| RS
+
+    RS -->|USB 3.0<br/>RGB + Depth| CAM
+    XR ---|USB-C<br/>Display Stream| RENDER
+
+    CAM -->|Aligned Frames| TRACK
+    CAM -->|Depth Data| PROC
+    BLE_RX -.->|IMU Telemetry| PROC
+    TRACK -->|Finger XY Position| PROC
+    PROC -->|Coords + Depth| RENDER
+    RENDER -->|3840x1080 SBS| DISP
+    DISP --> XR
+    PROC -->|Frame Data| SAVE
+    SAVE --> DATA
+
+    style Glove fill:#ffccbc
+    style Vision fill:#e1f5ff
+    style Compute fill:#fff4e1
+    style Output fill:#e8f5e9
+```
+
+## 2. MODULAR DIAGRAMS (One per Slide)
+
+### SLIDE 1: Glove Module
+```mermaid
+graph TB
+    BATT[Battery<br/>3.7V LiPo]
+    ESP32[ESP32<br/>MCU]
+    IMU1[IMU #1<br/>Thumb]
+    IMU2[IMU #2<br/>Index]
+    IMU3[IMU #3<br/>Middle]
+    IMU4[IMU #4<br/>Ring]
+    IMU5[IMU #5<br/>Pinky]
+    LED[Red LED<br/>Tracker]
+
+    BLE_OUT[BLE Output<br/>to Computer]
+    OPTICAL_OUT[Optical Output<br/>to Camera]
+
+    BATT -.->|Power| ESP32
+    ESP32 -->|SPI| IMU1 & IMU2 & IMU3 & IMU4 & IMU5
+    ESP32 -->|GPIO| LED
+    ESP32 ==>|Wireless| BLE_OUT
+    LED ==>|Light| OPTICAL_OUT
+
+    style BATT fill:#ff9800
+    style ESP32 fill:#2196f3
+    style IMU1 fill:#4caf50
+    style IMU2 fill:#4caf50
+    style IMU3 fill:#4caf50
+    style IMU4 fill:#4caf50
+    style IMU5 fill:#4caf50
+    style LED fill:#f44336
+    style BLE_OUT fill:#9c27b0
+    style OPTICAL_OUT fill:#9c27b0
+```
+
+### SLIDE 2: Camera Module
+```mermaid
+graph TB
+    FROM_GLOVE[From Glove:<br/>LED Light]
+
+    RS[RealSense<br/>D435/D455]
+    RGB[RGB Stream<br/>640x480 @ 30fps]
+    DEPTH[Depth Stream<br/>640x480 @ 30fps]
+    ALIGN[Align<br/>Depth to RGB]
+
+    TO_COMPUTER[To Computer:<br/>USB 3.0]
+
+    FROM_GLOVE -.->|Optical| RS
+    RS --> RGB
+    RS --> DEPTH
+    RGB --> ALIGN
+    DEPTH --> ALIGN
+    ALIGN ==> TO_COMPUTER
+
+    style FROM_GLOVE fill:#9c27b0
+    style RS fill:#2196f3
+    style RGB fill:#4caf50
+    style DEPTH fill:#ff9800
+    style ALIGN fill:#00bcd4
+    style TO_COMPUTER fill:#9c27b0
+```
+
+### SLIDE 3: Tracking Module
+```mermaid
+graph TB
+    FROM_CAMERA[From Camera:<br/>RGB + Depth]
+
+    TRACK_SEL{Select<br/>Method}
+
+    MP[MediaPipe<br/>Hand Detection]
+    MP_DETAIL[Index Finger<br/>Landmark #8]
+
+    LED_TRACK[LED Tracker<br/>HSV + Brightness]
+    LED_DETAIL[Red Color<br/>Morphology]
+
+    FILTER[Jump Gate<br/>Filter]
+
+    TO_PROC[To Processing:<br/>XY Position]
+
+    FROM_CAMERA --> TRACK_SEL
+    TRACK_SEL -->|Method 1| MP
+    TRACK_SEL -->|Method 2| LED_TRACK
+    MP --> MP_DETAIL
+    LED_TRACK --> LED_DETAIL
+    MP_DETAIL --> FILTER
+    LED_DETAIL --> FILTER
+    FILTER ==> TO_PROC
+
+    style FROM_CAMERA fill:#9c27b0
+    style TRACK_SEL fill:#ff9800
+    style MP fill:#4caf50
+    style MP_DETAIL fill:#66bb6a
+    style LED_TRACK fill:#f44336
+    style LED_DETAIL fill:#ef5350
+    style FILTER fill:#00bcd4
+    style TO_PROC fill:#9c27b0
+```
+
+### SLIDE 4: Processing Core
+```mermaid
+graph TB
+    FROM_TRACK[From Tracking:<br/>XY Position]
+    FROM_CAMERA[From Camera:<br/>Depth Data]
+    FROM_GLOVE[From Glove:<br/>IMU Data]
+
+    SCALE[Scale Coords<br/>640x480 → 1920x1080]
+    DEPTH_FILTER[Depth Filter<br/>5x5 Median]
+    NEAREST[Find Nearest<br/>Spiral Point]
+    ERROR[Calculate<br/>Error]
+
+    TO_RENDER[To Rendering:<br/>Coords + Depth]
+    TO_SAVE[To Saving:<br/>Frame Data]
+
+    FROM_TRACK --> SCALE
+    FROM_CAMERA --> DEPTH_FILTER
+    FROM_GLOVE -.-> ERROR
+    SCALE --> NEAREST
+    DEPTH_FILTER --> NEAREST
+    NEAREST --> ERROR
+    ERROR --> TO_RENDER
+    ERROR --> TO_SAVE
+
+    style FROM_TRACK fill:#9c27b0
+    style FROM_CAMERA fill:#9c27b0
+    style FROM_GLOVE fill:#9c27b0
+    style SCALE fill:#00bcd4
+    style DEPTH_FILTER fill:#00bcd4
+    style NEAREST fill:#4caf50
+    style ERROR fill:#ff9800
+    style TO_RENDER fill:#9c27b0
+    style TO_SAVE fill:#9c27b0
+```
+
+### SLIDE 5: 3D Rendering Module
+```mermaid
+graph TB
+    FROM_PROC[From Processing:<br/>Coords + Depth]
+
+    SPIRAL[Generate Spiral<br/>Archimedean]
+    DISPARITY[Calculate<br/>Disparity]
+    DISP_DETAIL[IPD: 63mm<br/>FOV: 46°]
+
+    LEFT[Render<br/>Left Eye]
+    RIGHT[Render<br/>Right Eye]
+
+    SBS[Side-by-Side<br/>3840x1080]
+
+    TO_DISPLAY[To Display:<br/>XReal Glasses]
+
+    FROM_PROC --> SPIRAL
+    FROM_PROC --> DISPARITY
+    DISPARITY --> DISP_DETAIL
+    SPIRAL --> LEFT
+    SPIRAL --> RIGHT
+    DISP_DETAIL --> LEFT
+    DISP_DETAIL --> RIGHT
+    LEFT --> SBS
+    RIGHT --> SBS
+    SBS ==> TO_DISPLAY
+
+    style FROM_PROC fill:#9c27b0
+    style SPIRAL fill:#4caf50
+    style DISPARITY fill:#00bcd4
+    style DISP_DETAIL fill:#0097a7
+    style LEFT fill:#2196f3
+    style RIGHT fill:#2196f3
+    style SBS fill:#1976d2
+    style TO_DISPLAY fill:#9c27b0
+```
+
+### SLIDE 6: Data Analysis Module
+```mermaid
+graph TB
+    FROM_PROC[From Processing:<br/>Frame Data]
+
+    DWELL[Dwell Detector<br/>Start/Stop]
+    METRICS[Error Metrics<br/>RMSE, P95]
+    TREMOR[Tremor Analysis<br/>4-10 Hz FFT]
+
+    CSV[Save CSV<br/>frames.csv]
+    JSON[Save JSON<br/>summary.json]
+    VIDEO[Save Video<br/>preview.mp4]
+
+    RESULTS[Results Screen<br/>Visualization]
+
+    FROM_PROC --> DWELL
+    FROM_PROC --> METRICS
+    FROM_PROC --> TREMOR
+    DWELL --> CSV
+    METRICS --> JSON
+    TREMOR --> JSON
+    CSV --> RESULTS
+    JSON --> RESULTS
+    VIDEO --> RESULTS
+
+    style FROM_PROC fill:#9c27b0
+    style DWELL fill:#ff9800
+    style METRICS fill:#4caf50
+    style TREMOR fill:#00bcd4
+    style CSV fill:#795548
+    style JSON fill:#795548
+    style VIDEO fill:#795548
+    style RESULTS fill:#2196f3
+```
+
+### SLIDE 7: Complete System Overview (All Modules Connected)
+```mermaid
+graph TB
+    subgraph M1["🧤 GLOVE MODULE"]
+        GLOVE[ESP32 + IMUs + LED<br/>Battery Powered]
+    end
+
+    subgraph M2["📷 CAMERA MODULE"]
+        CAMERA[RealSense Camera<br/>RGB + Depth Streams]
+    end
+
+    subgraph M3["👁️ TRACKING MODULE"]
+        TRACKING[Finger Tracking<br/>MediaPipe or LED]
+    end
+
+    subgraph M4["⚙️ PROCESSING CORE"]
+        PROCESSING[Coordinate Processing<br/>Error Calculation]
+    end
+
+    subgraph M5["🎨 RENDERING MODULE"]
+        RENDERING[3D Stereo Rendering<br/>Side-by-Side Output]
+    end
+
+    subgraph M6["📊 ANALYSIS MODULE"]
+        ANALYSIS[Data Analysis<br/>Results & Metrics]
+    end
+
+    subgraph DISPLAY["🥽 DISPLAY"]
+        XREAL[XReal Glasses<br/>3840x1080]
+    end
+
+    subgraph OUTPUT["💾 DATA OUTPUT"]
+        FILES[CSV + JSON + Video]
+    end
+
+    GLOVE ==>|BLE:<br/>IMU Data| PROCESSING
+    GLOVE ==>|Light:<br/>LED Signal| CAMERA
+    CAMERA ==>|USB:<br/>RGB + Depth| TRACKING
+    TRACKING ==>|XY Position| PROCESSING
+    CAMERA -.->|Depth Data| PROCESSING
+    PROCESSING ==>|Coords + Depth| RENDERING
+    PROCESSING ==>|Frame Data| ANALYSIS
+    RENDERING ==>|SBS Frame| XREAL
+    ANALYSIS ==>|Save| FILES
+
+    style M1 fill:#ffccbc
+    style M2 fill:#b3e5fc
+    style M3 fill:#c8e6c9
+    style M4 fill:#fff9c4
+    style M5 fill:#e1bee7
+    style M6 fill:#ffccbc
+    style DISPLAY fill:#f8bbd0
+    style OUTPUT fill:#d7ccc8
+```
+
+---
+
+## 3. SOFTWARE ARCHITECTURE (Modular Breakdown)
+
+### SLIDE 8: Configuration Layer
+```mermaid
+graph TB
+    USER[User Input<br/>CLI Args]
+    YAML[config.yaml<br/>Parameters]
+
+    CONFIG[config.py<br/>AppConfig Class]
+
+    TO_MAIN[To main.py<br/>Initialization]
+
+    USER --> CONFIG
+    YAML --> CONFIG
+    CONFIG ==> TO_MAIN
+
+    style USER fill:#e3f2fd
+    style YAML fill:#e3f2fd
+    style CONFIG fill:#fff3e0
+    style TO_MAIN fill:#9c27b0
+```
+
+### SLIDE 9: Camera Interface Layer
+```mermaid
+graph TB
+    FROM_CONFIG[From Config:<br/>Camera Settings]
+
+    RSIO[io_rs.py<br/>RealSenseIO]
+    PIPELINE[Pipeline<br/>Management]
+    ALIGN[Depth Align<br/>to Color]
+    INTRINSICS[Camera<br/>Intrinsics]
+
+    TO_RUNNER[To Runner:<br/>Frames + Metadata]
+
+    FROM_CONFIG --> RSIO
+    RSIO --> PIPELINE
+    RSIO --> ALIGN
+    RSIO --> INTRINSICS
+    PIPELINE --> TO_RUNNER
+    ALIGN --> TO_RUNNER
+    INTRINSICS -.-> TO_RUNNER
+
+    style FROM_CONFIG fill:#9c27b0
+    style RSIO fill:#2196f3
+    style PIPELINE fill:#4caf50
+    style ALIGN fill:#00bcd4
+    style INTRINSICS fill:#ff9800
+    style TO_RUNNER fill:#9c27b0
+```
+
+### SLIDE 10: Tracking Layer
+```mermaid
+graph TB
+    FROM_CAMERA[From Camera:<br/>RGB Frames]
+
+    MP[track_mp.py<br/>MediaPipe]
+    MP_HAND[Hand<br/>Detection]
+    MP_FILTER[Median<br/>Filter]
+
+    LED[track_led.py<br/>LED Tracker]
+    LED_HSV[HSV<br/>Filter]
+    LED_MORPH[Morphology<br/>Cleanup]
+
+    TO_RUNNER[To Runner:<br/>XY Position]
+
+    FROM_CAMERA --> MP
+    FROM_CAMERA --> LED
+    MP --> MP_HAND
+    MP_HAND --> MP_FILTER
+    LED --> LED_HSV
+    LED_HSV --> LED_MORPH
+    MP_FILTER --> TO_RUNNER
+    LED_MORPH --> TO_RUNNER
+
+    style FROM_CAMERA fill:#9c27b0
+    style MP fill:#4caf50
+    style MP_HAND fill:#66bb6a
+    style MP_FILTER fill:#81c784
+    style LED fill:#f44336
+    style LED_HSV fill:#ef5350
+    style LED_MORPH fill:#e57373
+    style TO_RUNNER fill:#9c27b0
+```
+
+### SLIDE 11: Processing & Rendering Layer
+```mermaid
+graph TB
+    FROM_TRACK[From Tracking:<br/>XY Position]
+    FROM_DEPTH[From Camera:<br/>Depth Data]
+
+    DEPTH_UTIL[depth_utils.py<br/>Filter Depth]
+    SPIRAL[spiral_3d.py<br/>Spiral Generator]
+    DISPARITY[Disparity<br/>Calculator]
+    VIZ[viz.py<br/>Overlay]
+
+    TO_DISPLAY[To Display:<br/>Stereo Frame]
+
+    FROM_TRACK --> SPIRAL
+    FROM_DEPTH --> DEPTH_UTIL
+    DEPTH_UTIL --> DISPARITY
+    SPIRAL --> DISPARITY
+    DISPARITY --> VIZ
+    VIZ ==> TO_DISPLAY
+
+    style FROM_TRACK fill:#9c27b0
+    style FROM_DEPTH fill:#9c27b0
+    style DEPTH_UTIL fill:#00bcd4
+    style SPIRAL fill:#4caf50
+    style DISPARITY fill:#2196f3
+    style VIZ fill:#ff9800
+    style TO_DISPLAY fill:#9c27b0
+```
+
+### SLIDE 12: Analysis & Output Layer
+```mermaid
+graph TB
+    FROM_RUNNER[From Runner:<br/>Frame Data]
+
+    DWELL[dwell.py<br/>State Machine]
+    METRICS[metrics.py<br/>Error Stats]
+    SIGNAL[signal_processing.py<br/>FFT Analysis]
+
+    SAVE[save.py<br/>RunSaver]
+    RESULTS[results_display.py<br/>Visualization]
+
+    FILES[Output:<br/>CSV/JSON/Video]
+
+    FROM_RUNNER --> DWELL
+    FROM_RUNNER --> METRICS
+    FROM_RUNNER --> SIGNAL
+    DWELL --> SAVE
+    METRICS --> SAVE
+    SIGNAL --> SAVE
+    SAVE --> RESULTS
+    RESULTS ==> FILES
+
+    style FROM_RUNNER fill:#9c27b0
+    style DWELL fill:#ff9800
+    style METRICS fill:#4caf50
+    style SIGNAL fill:#00bcd4
+    style SAVE fill:#795548
+    style RESULTS fill:#2196f3
+    style FILES fill:#9c27b0
+```
+
+### SLIDE 13: Complete Software Architecture Overview
+```mermaid
+graph TB
+    subgraph S1["⚙️ CONFIG"]
+        SCONFIG[config.py<br/>AppConfig]
+    end
+
+    subgraph S2["📷 CAMERA I/O"]
+        SRSIO[io_rs.py<br/>RealSense Interface]
+    end
+
+    subgraph S3["👁️ TRACKING"]
+        STRACK[track_mp.py<br/>track_led.py]
+    end
+
+    subgraph S4["🎨 RENDERING"]
+        SRENDER[spiral_3d.py<br/>depth_utils.py<br/>viz.py]
+    end
+
+    subgraph S5["🧠 ORCHESTRATION"]
+        SRUNNER[runner.py<br/>ExperimentRunner]
+    end
+
+    subgraph S6["📊 ANALYSIS"]
+        SANALYSIS[dwell.py<br/>metrics.py<br/>signal_processing.py]
+    end
+
+    subgraph S7["💾 DATA OUTPUT"]
+        SSAVE[save.py<br/>results_display.py]
+    end
+
+    SCONFIG ==>|Settings| SRUNNER
+    SRSIO ==>|Frames| SRUNNER
+    STRACK ==>|Position| SRUNNER
+    SRUNNER ==>|Orchestrates| SRSIO
+    SRUNNER ==>|Orchestrates| STRACK
+    SRUNNER ==>|Coordinates| SRENDER
+    SRUNNER ==>|Frame Data| SANALYSIS
+    SRENDER ==>|Stereo Output| SRUNNER
+    SANALYSIS ==>|Metrics| SSAVE
+    SRUNNER -.->|Trial Data| SSAVE
+
+    style S1 fill:#fff3e0
+    style S2 fill:#b3e5fc
+    style S3 fill:#c8e6c9
+    style S4 fill:#e1bee7
+    style S5 fill:#fff9c4
+    style S6 fill:#ffccbc
+    style S7 fill:#d7ccc8
+```
+
+## 3. DATA FLOW DIAGRAM
+
+```mermaid
+flowchart TD
+    START([User Starts Application]) --> INIT[Load config.yaml<br/>Initialize Camera]
+    INIT --> CAM_START[RealSense Streams<br/>640x480 RGB @ 30fps<br/>640x480 Depth @ 30fps]
+
+    CAM_START --> ALIGN[Align Depth to RGB<br/>Frame Alignment]
+    ALIGN --> TRACK_SEL{Tracking<br/>Method?}
+
+    TRACK_SEL -->|MediaPipe| MP_TRACK[MediaPipe Hand Detection<br/>Index Finger Landmark 8<br/>Median Filter 3 frames]
+    TRACK_SEL -->|LED| LED_TRACK[HSV Color + Brightness<br/>Red Detection 160-255<br/>Morphological Filtering]
+
+    MP_TRACK --> JUMP_GATE
+    LED_TRACK --> JUMP_GATE
+
+    JUMP_GATE[Jump Gate Filter<br/>Max 60px movement] --> VALID{Position<br/>Valid?}
+
+    VALID -->|No| DISPLAY
+    VALID -->|Yes| SCALE[Scale to Display<br/>640x480 → 1920x1080<br/>3.0x horiz, 2.25x vert]
+
+    SCALE --> NEAREST[Find Nearest Spiral Point<br/>Calculate Error Distance]
+
+    NEAREST --> GET_DEPTH[Get Median Depth<br/>5x5 window filter<br/>200-800mm range]
+
+    GET_DEPTH --> DWELL{Dwell<br/>Detection}
+
+    DWELL -->|Standby| DISPLAY
+    DWELL -->|Start Detected| RECORD[Recording Active]
+    DWELL -->|End Detected| ANALYZE
+
+    RECORD --> SAVE_FRAME[Save Frame Data<br/>Time, XY, Depth, Error<br/>frames.csv]
+
+    SAVE_FRAME --> STEREO[Compute Stereo Disparity<br/>IPD 63mm, FOV 46°<br/>~287px @ 0.5m depth]
+
+    STEREO --> RENDER[Render 3D Spiral + Finger<br/>Left Eye: -disparity/2<br/>Right Eye: +disparity/2]
+
+    RENDER --> DISPLAY[Display SBS Frame<br/>3840x1080 to XReal]
+
+    DISPLAY --> CHECK{Trial<br/>Complete?}
+    CHECK -->|No| ALIGN
+    CHECK -->|Yes| ANALYZE
+
+    ANALYZE[Calculate Metrics<br/>RMSE, Median, P95<br/>Tracking Loss Rate] --> SIGNAL_PROC[Tremor Analysis<br/>4-10 Hz Band<br/>FFT Processing]
+
+    SIGNAL_PROC --> OUTPUT[Save Results<br/>summary.json<br/>results.json<br/>paths_overlay.png]
+
+    OUTPUT --> END([Display Results Screen])
+
+    style START fill:#4caf50,color:#fff
+    style END fill:#2196f3,color:#fff
+    style TRACK_SEL fill:#ff9800,color:#fff
+    style DWELL fill:#9c27b0,color:#fff
+    style VALID fill:#f44336,color:#fff
+    style CHECK fill:#607d8b,color:#fff
+```
+
+---
+
+## Notes for Google Slides:
+- Each diagram is designed to fit on a single slide
+- Use white/light background for best readability
+- Recommended slide size: 16:9 standard
+- Copy each code block into Mermaid Live Editor (https://mermaid.live) to export as PNG/SVG
+- Alternatively, use Mermaid plugins for Google Slides if available
+
+---
+
+## COLTON STUFF (Previous Glove System Diagrams)
+
+### Hardware Subsystems
+```mermaid
+---
+config:
+layout: elk
+theme: dark
+---
+flowchart TB
+subgraph POWER["POWER SUBSYSTEM"]
+        BATTERY["3.7V LiPo Battery"]
+        REGULATOR["Voltage Regulator<br>3.3V Output"]
+end
+subgraph MCU["MICROCONTROLLER"]
+        ESP32_CORE["ESP32<br>Dual-Core CPU<br>240 MHz"]
+        BLE_RADIO["BLE Radio<br>2.4 GHz"]
+        SPI_CONTROLLER["SPI Controller<br>10 MHz"]
+        GPIO["GPIO Pin<br>LED Control"]
+end
+subgraph SENSORS["SENSOR ARRAY"]
+        IMU1["IMU #1<br>Thumb<br>Accel+Gyro"]
+        IMU2["IMU #2<br>Index<br>Accel+Gyro"]
+        IMU3["IMU #3<br>Middle<br>Accel+Gyro"]
+        IMU4["IMU #4<br>Ring<br>Accel+Gyro"]
+        IMU5["IMU #5<br>Pinky<br>Accel+Gyro"]
+end
+subgraph INDICATOR["VISUAL MARKER"]
+        LED_MARKER["Red LED<br>High Brightness<br>Fingertip Mount"]
+end
+subgraph OUTPUTS["OUTPUTS"]
+        BLE_OUT["BLE Transmission<br>To Host PC"]
+        OPTICAL_OUT["Light Emission<br>To Camera"]
+end
+    BATTERY -- "3.7V" --> REGULATOR
+    REGULATOR -- "3.3V" --> ESP32_CORE & IMU1 & IMU2 & IMU3 & IMU4 & IMU5 & LED_MARKER
+    SPI_CONTROLLER <-- MOSI/MISO<br>CLK/CS --> IMU1 & IMU2 & IMU3 & IMU4 & IMU5
+    GPIO -- PWM/Digital --> LED_MARKER
+    ESP32_CORE -- Controls --> SPI_CONTROLLER & BLE_RADIO & GPIO
+    BLE_RADIO -. Wireless .-> BLE_OUT
+    LED_MARKER -. Light .-> OPTICAL_OUT
+    BATTERY:::power
+    REGULATOR:::power
+    ESP32_CORE:::mcu
+    BLE_RADIO:::mcu
+    SPI_CONTROLLER:::mcu
+    GPIO:::mcu
+    IMU1:::sensor
+    IMU2:::sensor
+    IMU3:::sensor
+    IMU4:::sensor
+    IMU5:::sensor
+    LED_MARKER:::led
+    BLE_OUT:::output
+    OPTICAL_OUT:::output
+    classDef power fill:#fffff
+    classDef mcu fill:#fffff
+    classDef sensor fill:#fffff
+    classDef led fill:#fffff
+    classDef output fill:#fffff
+```
+
+### Full System Architecture
+```mermaid
+graph TB
+subgraph GLOVE["GLOVE MODULE"]
+    MCU["ESP32<br/>Microcontroller"]
+    IMU1["IMU #1<br/>Thumb"]
+    IMU2["IMU #2<br/>Index"]
+    IMU3["IMU #3<br/>Middle"]
+    IMU4["IMU #4<br/>Ring"]
+    IMU5["IMU #5<br/>Pinky"]
+    LED["Red LED<br/>Fingertip Tracker"]
+    BATT["Battery<br/>3.7V LiPo"]
+end
+
+subgraph TRACKING["VISION TRACKING"]
+    CAMERA["Intel RealSense<br/>D435/D455<br/>RGB-D Camera"]
+end
+
+subgraph COMPUTE["MAIN COMPUTE UNIT"]
+    PC["Host Computer<br/>Windows/Linux"]
+    BLE_RX["BLE Receiver"]
+    USB_HUB["USB Hub"]
+end
+
+subgraph DISPLAY["DISPLAY SUBSYSTEM"]
+    XREAL["XReal Glasses<br/>AR Display<br/>3840x1080"]
+end
+
+subgraph OUTPUT["DATA OUTPUTS"]
+    CSV["CSV Files<br/>Frame Data"]
+    VIDEO["MP4 Video<br/>Preview"]
+    JSON["JSON Files<br/>Metrics"]
+end
+
+%% Power connections (dashed for power)
+BATT -.->|Power| MCU
+BATT -.->|Power| IMU1
+BATT -.->|Power| IMU2
+BATT -.->|Power| IMU3
+BATT -.->|Power| IMU4
+BATT -.->|Power| IMU5
+BATT -.->|Power| LED
+
+%% SPI connections (within glove)
+MCU -->|SPI| IMU1
+MCU -->|SPI| IMU2
+MCU -->|SPI| IMU3
+MCU -->|SPI| IMU4
+MCU -->|SPI| IMU5
+MCU -->|GPIO| LED
+
+%% Wireless connections
+MCU -.->|BLE<br/>Wireless| BLE_RX
+
+%% LED tracking (optical)
+LED -.->|Light<br/>Optical| CAMERA
+
+%% USB connections
+CAMERA -->|USB-C<br/>RGB+Depth| USB_HUB
+XREAL -->|USB-C<br/>Display Port| USB_HUB
+USB_HUB -->|USB 3.0| PC
+
+%% Internal processing
+BLE_RX -.->|Internal| PC
+PC -.->|Internal| OUTPUT
+
+%% Data flow to outputs
+PC -->|Saves| CSV
+PC -->|Saves| VIDEO
+PC -->|Saves| JSON
+
+classDef hardware fill:#ffccbc
+classDef wireless fill:#b2dfdb
+classDef compute fill:#bbdefb
+classDef display fill:#e1bee7
+classDef output fill:#fff9c4
+
+class MCU,IMU1,IMU2,IMU3,IMU4,IMU5,LED,BATT,CAMERA hardware
+class BLE_RX wireless
+class PC,USB_HUB compute
+class XREAL display
+class CSV,VIDEO,JSON output
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,6 +1,6 @@
 camera:
-  width: 640
-  height: 480
+  width: 1920
+  height: 1080
   fps: 30
   use_auto_exposure: false  # Lock exposure for consistent LED tracking
   exposure: 50  # Lower value = darker image, LED stands out more
@@ -12,17 +12,17 @@ camera:
   max_depth_mm: 800
 
 spiral:
-  a: 12.0
-  b: 8.0
+  a: 30.0
+  b: 35.0
   turns: 2
   theta_step: 0.01
-  line_thickness: 5
+  line_thickness: 30
   color_bgr: [40, 220, 40]
 
 dwell:
-  StartRadiusPx: 18
+  StartRadiusPx: 25
   StartDwellSec: 1.0
-  EndRadiusPx: 18
+  EndRadiusPx: 25
   StopDwellSec: 1.0
   hysteresis_px: 6
 
@@ -47,14 +47,14 @@ color:
 led:
   # LED tracking settings (combined red HSV + brightness)
   # Filters out white ceiling lights by requiring BOTH red AND bright
-  hsv_low: [0, 60, 160]      # H: red hue, S: moderate saturation, V: bright
-  hsv_high: [110, 255, 255]  # Wider hue range to catch all reds
-  brightness_threshold: 110  # Minimum brightness (0-255)
+  hsv_low: [0, 100, 150]     # H: red hue, S: high saturation, V: bright
+  hsv_high: [20, 255, 255]   # Narrow hue range for pure red (0-20 degrees)
+  brightness_threshold: 20  # Minimum brightness (0-255) - strict
   morph_kernel: 3
-  min_area: 5
+  min_area: 20               # Minimum blob area to filter noise
 
 experiment:
-  methods_order: ["mp", "hsv"]  # "hsv" now uses LED tracking (red + brightness)
+  methods_order: ["hsv", "hsv"]  # "hsv" now uses LED tracking (red + brightness)
   trials_per_method: 1          # ignored; runner forces 1
   save_preview: false           # set true to write preview.mp4
   output_dir: "runs"
@@ -64,5 +64,20 @@ experiment:
 tremor_analysis:
   band_low_hz: 4.0           # lower bound of tremor frequency band
   band_high_hz: 10.0         # upper bound of tremor frequency band
+
+stereo_3d:
+  target_depth_m: 0.5        # Spiral perceived depth in meters for XReal glasses
+  disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
+  flip_x: false               # Flip horizontal axis (for head-mounted camera)
+  flip_y: false              # Flip vertical axis
+  finger_scale_x: 0.75      # FOV compensation (Display 46° / Camera 69° ≈ 0.67)
+  finger_scale_y: 1       # FOV compensation vertical
+
+calibration:
+  enabled: true             # Enable/disable calibration transform
+  calibration_file: "calibration.json"  # Path to calibration file (relative to output_dir)
+  dot_speed_revolutions_per_sec: .1  # Speed of moving dot (lower = slower, easier to trace)
+  num_traces: 2              # Number of complete spiral traces for calibration
+  countdown_sec: 3           # Countdown duration before calibration starts
 
 show_live_preview: true

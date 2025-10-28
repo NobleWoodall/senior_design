@@ -89,6 +89,13 @@ def main():
 
     profile = pipeline.start(config)
 
+    # Enable auto-exposure on color sensor for proper brightness
+    color_sensor = profile.get_device().first_color_sensor()
+    color_sensor.set_option(rs.option.enable_auto_exposure, True)
+    # Optionally set a fixed higher exposure instead (uncomment if auto doesn't work well):
+    # color_sensor.set_option(rs.option.enable_auto_exposure, False)
+    # color_sensor.set_option(rs.option.exposure, 300)
+
     # Align depth to color frame for pixel-wise correspondence
     align = rs.align(rs.stream.color)
 

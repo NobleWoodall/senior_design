@@ -75,6 +75,23 @@ class TremorAnalysisCfg:
     band_high_hz:float=10.0
 
 @dataclass
+class Stereo3DCfg:
+    target_depth_m:float=0.5
+    disparity_offset_px:float=0.0
+    flip_x:bool=False
+    flip_y:bool=False
+    finger_scale_x:float=1.0
+    finger_scale_y:float=1.0
+
+@dataclass
+class CalibrationCfg:
+    enabled:bool=False
+    calibration_file:str="calibration.json"
+    dot_speed_revolutions_per_sec:float=0.15
+    num_traces:int=2
+    countdown_sec:int=3
+
+@dataclass
 class AppConfig:
     camera:CameraCfg=field(default_factory=CameraCfg)
     spiral:SpiralCfg=field(default_factory=SpiralCfg)
@@ -84,6 +101,8 @@ class AppConfig:
     led:LEDCfg=field(default_factory=LEDCfg)
     experiment:ExperimentCfg=field(default_factory=ExperimentCfg)
     tremor_analysis:TremorAnalysisCfg=field(default_factory=TremorAnalysisCfg)
+    stereo_3d:Stereo3DCfg=field(default_factory=Stereo3DCfg)
+    calibration:CalibrationCfg=field(default_factory=CalibrationCfg)
     show_live_preview:bool=True
 
     @staticmethod
@@ -97,5 +116,7 @@ class AppConfig:
             led=LEDCfg(**d.get("led",{})),
             experiment=ExperimentCfg(**d.get("experiment",{})),
             tremor_analysis=TremorAnalysisCfg(**d.get("tremor_analysis",{})),
+            stereo_3d=Stereo3DCfg(**d.get("stereo_3d",{})),
+            calibration=CalibrationCfg(**d.get("calibration",{})),
             show_live_preview=bool(d.get("show_live_preview", True)),
         )
