@@ -279,10 +279,19 @@ class CalibrationRunner:
                 pt = tracker.track(color)
                 if pt is not None:
                     x_cam, y_cam = pt
+
+                    # Apply existing calibration if refining
+                    if initial_matrix is not None:
+                        x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
+
                     x_display = x_cam * scale_x
                     y_display = y_cam * scale_y
-                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
-                    self._draw_stereo_text(view, "PREVIEW - Your finger is visible", (0, 255, 0), 40)
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
+
+                    status = "PREVIEW - Your finger is visible"
+                    if initial_matrix is not None:
+                        status += " (with current calibration)"
+                    self._draw_stereo_text(view, status, (0, 255, 0), 40)
                 else:
                     self._draw_stereo_text(view, "PREVIEW - No tracking", (0, 0, 255), 40)
 
@@ -391,30 +400,45 @@ class CalibrationRunner:
 
                 # Collect data if tracking successful
                 if pt is not None:
+                    x_cam_original, y_cam_original = pt  # Store original for calibration data collection
                     x_cam, y_cam = pt
+
+                    # Apply existing calibration if refining
+                    if initial_matrix is not None:
+                        x_cam, y_cam = apply_calibration(initial_matrix, x_cam, y_cam)
 
                     # Scale to display coordinates for visualization
                     x_display = x_cam * scale_x
                     y_display = y_cam * scale_y
 
-                    # Draw tracked finger position
-                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=10)
+                    # Draw tracked finger position (PURPLE/MAGENTA)
+                    spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
+
+                    # Calculate and show error distance
+                    error_px = math.hypot(x_display - dot_x, y_display - dot_y)
 
                     # Store calibration pair (camera coords for src, camera coords for dst)
                     # Convert dot position from display back to camera coordinates
                     dot_x_cam = dot_x / scale_x
                     dot_y_cam = dot_y / scale_y
 
-                    src_points.append((x_cam, y_cam))
+                    # For refinement, use original raw position as source
+                    # so we can compose the matrices later
+                    src_points.append((x_cam_original, y_cam_original) if initial_matrix is not None else (x_cam, y_cam))
                     dst_points.append((dot_x_cam, dot_y_cam))
                     tracked_count += 1
 
-                # Draw status
-                progress_pct = (elapsed / trace_duration) * 100
-                self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
-                self._draw_stereo_text(view, f"Points collected: {tracked_count}", (200, 200, 200), 80)
-
-                if pt is None:
+                # Draw status with error feedback
+                if pt is not None:
+                    progress_pct = (elapsed / trace_duration) * 100
+                    self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
+                    self._draw_stereo_text(view, f"Points: {tracked_count} | Error: {error_px:.1f}px", (200, 200, 200), 80)
+                    self._draw_stereo_text(view, "Yellow=Target | Purple=Your Finger", (200, 200, 200), 120)
+                else:
+                    # Draw status without tracking
+                    progress_pct = (elapsed / trace_duration) * 100
+                    self._draw_stereo_text(view, f"CALIBRATING: {progress_pct:.0f}%", (0, 255, 0), 40)
+                    self._draw_stereo_text(view, f"Points: {tracked_count}", (200, 200, 200), 80)
                     self._draw_stereo_text(view, "NO TRACKING - Keep finger/LED visible", (0, 0, 255), 120)
 
                 cv2.imshow("Calibration", view)
