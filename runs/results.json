@@ -1,0 +1,27 @@
+{
+  "trial_summaries": {
+    "mp": {},
+    "hsv": {
+      "sample_count": 66,
+      "duration_sec": 5.828000000008615,
+      "fps_avg": 11.324639670539197,
+      "err_px": {
+        "mean": 36.88542108851085,
+        "median": 32.913613437875554,
+        "std": 26.569931683188532,
+        "p90": 76.59971092760165,
+        "p95": 78.81032058141555,
+        "max": 102.4132472097694
+      },
+      "rmse_time_weighted": 45.541451990732995,
+      "tracking_loss_rate": 0.0,
+      "mean_depth_mm": 424.2564102564103,
+      "valid_depth_fraction_avg": 0.5909090909090909
+    }
+  },
+  "signal_analysis": {},
+  "stereo_3d": {
+    "target_depth_m": 0.5,
+    "disparity_px": -315.0360978299588
+  }
+}
