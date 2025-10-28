@@ -1,6 +1,6 @@
 camera:
-  width: 640
-  height: 480
+  width: 1920
+  height: 1080
   fps: 30
   use_auto_exposure: false  # Lock exposure for consistent LED tracking
   exposure: 50  # Lower value = darker image, LED stands out more
@@ -54,7 +54,7 @@ led:
   min_area: 20               # Minimum blob area to filter noise
 
 experiment:
-  methods_order: ["mp", "hsv"]  # "hsv" now uses LED tracking (red + brightness)
+  methods_order: ["hsv", "hsv"]  # "hsv" now uses LED tracking (red + brightness)
   trials_per_method: 1          # ignored; runner forces 1
   save_preview: false           # set true to write preview.mp4
   output_dir: "runs"
@@ -68,9 +68,9 @@ tremor_analysis:
 stereo_3d:
   target_depth_m: 0.5        # Spiral perceived depth in meters for XReal glasses
   disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
-  flip_x: false              # Flip horizontal axis (for head-mounted camera)
+  flip_x: true               # Flip horizontal axis (for head-mounted camera)
   flip_y: false              # Flip vertical axis
-  finger_scale_x: 0.67       # Finger movement scale adjustment horizontal (FOV compensation)
-  finger_scale_y: 0.67       # Finger movement scale adjustment vertical
+  finger_scale_x: 1.0        # No scaling needed with 1920x1080 camera
+  finger_scale_y: 1.0        # Direct 1:1 pixel mapping
 
 show_live_preview: true
