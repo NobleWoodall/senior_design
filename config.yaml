@@ -76,8 +76,12 @@ stereo_3d:
 calibration:
   enabled: true             # Enable/disable calibration transform
   calibration_file: "calibration.json"  # Path to calibration file (relative to output_dir)
-  dot_speed_revolutions_per_sec: .03  # Speed of moving dot (lower = slower, easier to trace)
-  num_traces: 2              # Number of complete spiral traces for calibration
+  # Grid calibration: 7x7 grid (49 points) across full 1920x1080 display
+  # Position LED at each yellow dot, press SPACE or wait 3s to auto-record
+  # Purple dot shows tracking (doesn't need to be close to yellow - that's what calibration fixes!)
+  # Takes ~12-15 minutes total
+  dot_speed_revolutions_per_sec: .03  # (Legacy parameter - not used in grid calibration)
+  num_traces: 2              # (Legacy parameter - not used in grid calibration)
   countdown_sec: 3           # Countdown duration before calibration starts
 
 show_live_preview: true

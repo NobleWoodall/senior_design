@@ -248,9 +248,8 @@ class CalibrationRunner:
         src_points = []  # Detected finger positions (camera coords)
         dst_points = []  # Ground truth dot positions (camera coords)
 
-        # Auto-record settings
-        ERROR_THRESHOLD = 30.0  # pixels - how close to be "aligned"
-        DWELL_TIME = 3.0  # seconds - how long to stay aligned
+        # Auto-record settings (NO DISTANCE THRESHOLD - fixes chicken-and-egg problem)
+        DWELL_TIME = 3.0  # seconds - hold steady for stability
         dwell_start = None
         accumulated_samples = []  # Store samples during dwell
 
@@ -297,57 +296,50 @@ class CalibrationRunner:
                     # Draw tracked finger position (PURPLE)
                     spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=20)
 
-                    # Calculate error
+                    # Calculate error (for display only)
                     error_px = math.hypot(x_display - dot_x, y_display - dot_y)
 
-                    # Auto-record logic: dwell detection
-                    if error_px < ERROR_THRESHOLD:
-                        # Within threshold - start or continue dwell
-                        if dwell_start is None:
-                            dwell_start = time.time()
-                            accumulated_samples = []
+                    # Auto-record logic: dwell detection (NO DISTANCE THRESHOLD!)
+                    # Just requires stability (3s) - purple dot can be far from yellow!
+                    if dwell_start is None:
+                        dwell_start = time.time()
+                        accumulated_samples = []
 
-                        # Accumulate samples
-                        accumulated_samples.append((x_cam_original, y_cam_original))
+                    # Accumulate samples
+                    accumulated_samples.append((x_cam_original, y_cam_original))
 
-                        # Check dwell duration
-                        dwell_elapsed = time.time() - dwell_start
-                        remaining_time = DWELL_TIME - dwell_elapsed
+                    # Check dwell duration
+                    dwell_elapsed = time.time() - dwell_start
+                    remaining_time = DWELL_TIME - dwell_elapsed
 
-                        if dwell_elapsed >= DWELL_TIME:
-                            # Dwell complete - record point using average of samples
-                            avg_x = sum(s[0] for s in accumulated_samples) / len(accumulated_samples)
-                            avg_y = sum(s[1] for s in accumulated_samples) / len(accumulated_samples)
+                    if dwell_elapsed >= DWELL_TIME:
+                        # Dwell complete - record point using average of samples
+                        avg_x = sum(s[0] for s in accumulated_samples) / len(accumulated_samples)
+                        avg_y = sum(s[1] for s in accumulated_samples) / len(accumulated_samples)
 
-                            # Convert dot position to camera coords
-                            dot_x_cam = dot_x / scale_x
-                            dot_y_cam = dot_y / scale_y
+                        # Convert dot position to camera coords
+                        dot_x_cam = dot_x / scale_x
+                        dot_y_cam = dot_y / scale_y
 
-                            src_points.append((avg_x, avg_y))
-                            dst_points.append((dot_x_cam, dot_y_cam))
+                        src_points.append((avg_x, avg_y))
+                        dst_points.append((dot_x_cam, dot_y_cam))
 
-                            print(f"  Point {current_point_idx + 1} recorded - Error: {error_px:.1f}px (avg of {len(accumulated_samples)} samples)")
-                            current_point_idx += 1
-                            dwell_start = None
-                            accumulated_samples = []
-                        else:
-                            # Still dwelling
-                            self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - Hold steady: {remaining_time:.1f}s", (0, 255, 0), 40)
-                            self._draw_stereo_text(view, f"Error: {error_px:.1f}px - Keep aligned!", (200, 200, 200), 80)
-                            self._draw_stereo_text(view, "Yellow=Target | Purple=Your LED", (200, 200, 200), 120)
-                    else:
-                        # Outside threshold - reset dwell
+                        print(f"  Point {current_point_idx + 1} recorded - Error: {error_px:.1f}px (avg of {len(accumulated_samples)} samples)")
+                        current_point_idx += 1
                         dwell_start = None
                         accumulated_samples = []
-                        self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - Error: {error_px:.1f}px", (255, 165, 0), 40)
-                        self._draw_stereo_text(view, f"Get closer! (need < {ERROR_THRESHOLD:.0f}px)", (200, 200, 200), 80)
-                        self._draw_stereo_text(view, "Yellow=Target | Purple=Your LED", (200, 200, 200), 120)
+                    else:
+                        # Still dwelling - show countdown
+                        self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - Hold steady: {remaining_time:.1f}s", (0, 255, 0), 40)
+                        self._draw_stereo_text(view, f"Distance: {error_px:.1f}px (any distance OK!)", (200, 200, 200), 80)
+                        self._draw_stereo_text(view, "Yellow=Target | Purple=LED | Press SPACE to record now", (200, 200, 200), 120)
                 else:
                     # No tracking - reset dwell
                     dwell_start = None
                     accumulated_samples = []
                     self._draw_stereo_text(view, f"Point {current_point_idx + 1}/{num_points} - NO TRACKING", (0, 0, 255), 40)
-                    self._draw_stereo_text(view, "Make LED visible", (200, 200, 200), 80)
+                    self._draw_stereo_text(view, "Make LED visible to camera", (200, 200, 200), 80)
+                    self._draw_stereo_text(view, "Yellow=Target position", (200, 200, 200), 120)
 
                 cv2.imshow("Calibration_Stationary", view)
 
@@ -465,28 +457,50 @@ class CalibrationRunner:
             return False
 
     def _generate_calibration_points(self, spiral: Spiral3D, num_points: int):
-        """Generate evenly distributed points around the spiral for stationary calibration."""
+        """
+        Generate 7x7 grid of calibration points across full display (1920x1080).
+
+        Grid covers entire display with 10% margin from edges to avoid tracking
+        issues at corners. Points are generated row-by-row for easier user flow.
+
+        Args:
+            spiral: Spiral3D object (unused, kept for compatibility)
+            num_points: Number of points (unused, always generates 49 for 7x7 grid)
+
+        Returns:
+            List of (x, y) tuples in display coordinates
+        """
         points = []
-        total_points = len(spiral.spiral_points)
 
-        # Distribute points evenly along spiral
-        for i in range(num_points):
-            # Skip very beginning and very end
-            progress = (i + 1) / (num_points + 1)
-            idx = int(progress * total_points)
-            idx = max(0, min(idx, total_points - 1))
+        # 7x7 grid configuration
+        rows = 7
+        cols = 7
+        margin = 0.10  # 10% margin from edges
 
-            # Get spiral point in relative coordinates
-            x_rel = spiral.spiral_points[idx, 0]
-            y_rel = spiral.spiral_points[idx, 1]
+        # Calculate grid boundaries
+        x_start = self.EYE_WIDTH * margin
+        x_end = self.EYE_WIDTH * (1 - margin)
+        y_start = self.EYE_HEIGHT * margin
+        y_end = self.EYE_HEIGHT * (1 - margin)
 
-            # Transform to display coordinates
-            cx = self.EYE_WIDTH / 2.0
-            cy = self.EYE_HEIGHT / 2.0
-            x = x_rel + cx
-            y = y_rel + cy
+        # Generate grid points row-by-row (top to bottom, left to right)
+        for i in range(rows):
+            for j in range(cols):
+                # Calculate position
+                if cols > 1:
+                    x = x_start + (x_end - x_start) * j / (cols - 1)
+                else:
+                    x = self.EYE_WIDTH / 2.0
 
-            points.append((x, y))
+                if rows > 1:
+                    y = y_start + (y_end - y_start) * i / (rows - 1)
+                else:
+                    y = self.EYE_HEIGHT / 2.0
+
+                points.append((x, y))
+
+        print(f"[Grid Calibration] Generated {len(points)} points ({rows}x{cols} grid)")
+        print(f"  Coverage: X[{x_start:.0f}-{x_end:.0f}px], Y[{y_start:.0f}-{y_end:.0f}px]")
 
         return points
 
