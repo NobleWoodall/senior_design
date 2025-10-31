@@ -51,7 +51,7 @@ led:
   hsv_high: [20, 255, 255]   # Narrow hue range for pure red (0-20 degrees)
   brightness_threshold: 20  # Minimum brightness (0-255) - strict
   morph_kernel: 3
-  min_area: 20               # Minimum blob area to filter noise
+  min_area: 60               # Minimum blob area to filter noise (scaled for 1920x1080)
 
 experiment:
   methods_order: ["mp"]  # Single method: "mp" for MediaPipe or "hsv" for LED tracking
@@ -59,7 +59,7 @@ experiment:
   save_preview: false           # set true to write preview.mp4
   output_dir: "runs"
   metronome_bpm: 0
-  max_jump_px: 60            # jump gate threshold in pixels
+  max_jump_px: 180            # jump gate threshold (scaled for 1920x1080 resolution)
 
 tremor_analysis:
   band_low_hz: 4.0           # lower bound of tremor frequency band
