@@ -4,11 +4,11 @@ import math
 import numpy as np
 import cv2
 from dataclasses import asdict
+from enum import Enum
 
 from .config import AppConfig
 from .io_rs import RealSenseIO
 from .spiral_3d import Spiral3D
-from .dwell import DwellDetector
 from .track_mp import MediaPipeTracker
 from .track_led import LEDTracker
 from .depth_utils import median_depth_mm
@@ -17,6 +17,14 @@ from .save import RunSaver
 from .signal_processing import analyze_after_runs
 from .results_display import display_results
 from .calibration_utils import load_calibration, apply_calibration
+
+
+class TrialState(Enum):
+    """State machine for dot-follow trial."""
+    COUNTDOWN = "countdown"
+    FOLLOWING = "following"
+    END_WAIT = "end_wait"
+    COMPLETE = "complete"
 
 class ExperimentRunner:
     # XReal glasses dimensions (3840x1080 side-by-side stereo)
@@ -68,24 +76,59 @@ class ExperimentRunner:
         if self.EYE_WIDTH <= x_right < self.FULL_WIDTH and 0 <= y_pos < self.EYE_HEIGHT:
             cv2.circle(frame, (x_right, y_pos), radius, color, thickness)
 
+    def _get_dot_position_at_time(self, spiral: Spiral3D, t_elapsed: float, total_time: float):
+        """
+        Calculate moving dot position along spiral based on elapsed time.
+
+        Args:
+            spiral: Spiral3D object
+            t_elapsed: Time elapsed since dot started moving
+            total_time: Total time for one complete spiral traversal
+
+        Returns:
+            (dot_x, dot_y): Position in display coordinates
+        """
+        # Calculate progress (0.0 to 1.0)
+        progress = min(t_elapsed / total_time, 1.0)
+
+        # Map progress to spiral point index
+        idx = int(progress * (len(spiral.spiral_points) - 1))
+
+        # Get point from precomputed spiral (spiral-relative coords)
+        x_rel = spiral.spiral_points[idx, 0]
+        y_rel = spiral.spiral_points[idx, 1]
+
+        # Transform to display coordinates
+        cx = self.EYE_WIDTH / 2.0
+        cy = self.EYE_HEIGHT / 2.0
+        return x_rel + cx, y_rel + cy
+
     def _run_single_trial(self, rsio:RealSenseIO, spiral:Spiral3D, saver:RunSaver,
                           method:str, tracker, depth_win:int, fps:int,
                           metronome_bpm:int, show_live_preview:bool):
-        endpoints = spiral.endpoints()
-        sx, sy = endpoints["start"]
-        ex, ey = endpoints["end"]
-        dwell = DwellDetector(self.cfg.dwell.StartRadiusPx, self.cfg.dwell.StartDwellSec,
-                              self.cfg.dwell.EndRadiusPx, self.cfg.dwell.StopDwellSec, self.cfg.dwell.hysteresis_px)
+        # Trial state machine
+        state = TrialState.COUNTDOWN
+        countdown_start_time = None
+        following_start_time = None
+        end_wait_start_time = None
 
-        times=[]
-        errs=[]
-        depths=[]
-        depth_valid_flags=[]
-        path_xy=[]
-        path_s=[]
-        path_err=[]
+        # Configuration
+        countdown_sec = self.cfg.dot_follow.countdown_sec
+        dot_speed_sec = self.cfg.dot_follow.dot_speed_sec_per_spiral
+        end_wait_sec = self.cfg.dot_follow.end_wait_sec
 
-        frame_idx=0
+        # Data recording arrays
+        times = []
+        errs = []
+        depths = []
+        depth_valid_flags = []
+        path_xy = []
+        path_s = []
+        path_err = []
+        dot_positions = []
+        dot_distances = []
+
+        frame_idx = 0
         color0, _, _ = rsio.get_aligned()
         if color0 is None:
             raise RuntimeError("Failed to read from RealSense.")
@@ -95,29 +138,51 @@ class ExperimentRunner:
         scale_x = self.EYE_WIDTH / cam_w
         scale_y = self.EYE_HEIGHT / cam_h
 
-        print(f"\n[3D Stereo Mode]")
+        print(f"\n[3D Stereo Mode - Dot Follow]")
         print(f"  Camera: {cam_w}x{cam_h}")
         print(f"  Display: {self.FULL_WIDTH}x{self.FULL_HEIGHT} (side-by-side)")
-        print(f"  Scale: {scale_x:.2f}x, {scale_y:.2f}x\n")
+        print(f"  Scale: {scale_x:.2f}x, {scale_y:.2f}x")
+        print(f"  Countdown: {countdown_sec}s, Dot speed: {dot_speed_sec}s/spiral, End wait: {end_wait_sec}s\n")
 
         if self.cfg.experiment.save_preview:
             saver.open_video(self.FULL_WIDTH, self.FULL_HEIGHT, fps)
 
         last_xy = None
         MAX_JUMP_PX = int(self.cfg.experiment.max_jump_px)
-        trial_active=True
-        started=False
+        trial_active = True
+        current_depth = None
 
         while trial_active:
             color, depth, t_now = rsio.get_aligned()
             if color is None:
                 continue
 
-            # Render stereo 3D spiral (3840x1080)
-            view = spiral.draw_stereo(
-                color_bgr=tuple(self.cfg.spiral.color_bgr),
-                thickness=self.cfg.spiral.line_thickness
-            )
+            # State machine: Update state based on time
+            if state == TrialState.COUNTDOWN:
+                if countdown_start_time is None:
+                    countdown_start_time = t_now
+                countdown_elapsed = t_now - countdown_start_time
+
+                if countdown_elapsed >= countdown_sec:
+                    state = TrialState.FOLLOWING
+                    following_start_time = t_now
+                    print(f"[Trial] Countdown complete, dot starting to move")
+
+            elif state == TrialState.FOLLOWING:
+                following_elapsed = t_now - following_start_time
+
+                if following_elapsed >= dot_speed_sec:
+                    state = TrialState.END_WAIT
+                    end_wait_start_time = t_now
+                    print(f"[Trial] Dot reached end, waiting {end_wait_sec}s")
+
+            elif state == TrialState.END_WAIT:
+                end_wait_elapsed = t_now - end_wait_start_time
+
+                if end_wait_elapsed >= end_wait_sec:
+                    state = TrialState.COMPLETE
+                    trial_active = False
+                    print(f"[Trial] Trial complete")
 
             # Track finger/LED in camera coordinates
             pt = tracker.track(color)
@@ -135,6 +200,24 @@ class ExperimentRunner:
             else:
                 last_xy = None
 
+            # Get depth for spiral coloring
+            if pt is not None:
+                x_cam, y_cam = pt
+                current_depth = median_depth_mm(depth, int(round(x_cam)), int(round(y_cam)), depth_win,
+                                               self.cfg.camera.min_depth_mm, self.cfg.camera.max_depth_mm)
+            else:
+                current_depth = None
+
+            # Render stereo 3D spiral with depth-based coloring
+            view = spiral.draw_stereo(
+                color_bgr=tuple(self.cfg.spiral.color_bgr),
+                thickness=self.cfg.spiral.line_thickness,
+                depth_mm=current_depth,
+                depth_close_mm=self.cfg.dot_follow.depth_close_mm,
+                depth_far_mm=self.cfg.dot_follow.depth_far_mm
+            )
+
+            # Process finger position and draw visuals
             if pt is not None:
                 x_cam, y_cam = pt
 
@@ -147,10 +230,10 @@ class ExperimentRunner:
                 y = y_cam * scale_y
 
                 # Apply FOV adjustment scaling (center-based for proportional movement)
-                cx = self.EYE_WIDTH / 2.0
-                cy = self.EYE_HEIGHT / 2.0
-                x = cx + (x - cx) * self.cfg.stereo_3d.finger_scale_x
-                y = cy + (y - cy) * self.cfg.stereo_3d.finger_scale_y
+                cx_transform = self.EYE_WIDTH / 2.0
+                cy_transform = self.EYE_HEIGHT / 2.0
+                x = cx_transform + (x - cx_transform) * self.cfg.stereo_3d.finger_scale_x
+                y = cy_transform + (y - cy_transform) * self.cfg.stereo_3d.finger_scale_y
 
                 # Apply coordinate flipping for head-mounted camera
                 if self.cfg.stereo_3d.flip_x:
@@ -158,60 +241,79 @@ class ExperimentRunner:
                 if self.cfg.stereo_3d.flip_y:
                     y = self.EYE_HEIGHT - y
 
-                # Find nearest spiral point
-                xs, ys, s_sp, _ = spiral.nearest_point(x, y)
-                err = math.hypot(x-xs, y-ys)
+                # Get depth
+                z = current_depth
+                z_valid = float(not math.isnan(z)) if z is not None else 0.0
 
-                # Get depth at camera coordinates
-                z = median_depth_mm(depth, int(round(x_cam)), int(round(y_cam)), depth_win,
-                                   self.cfg.camera.min_depth_mm, self.cfg.camera.max_depth_mm)
-                z_valid = float(not math.isnan(z))
+                # Draw finger dot
+                spiral.draw_point_on_spiral(view, x, y, color=(255, 0, 255), radius=15)
 
-                # Dwell detection (display coordinates)
-                d_start = math.hypot(x-sx, y-sy)
-                d_end = math.hypot(x-ex, y-ey)
-                st = dwell.update(t_now, d_start, d_end)
-                started = started or st.recording
+                # State-specific visualization and data recording
+                if state == TrialState.COUNTDOWN:
+                    # Show countdown
+                    countdown_remaining = int(countdown_sec - (t_now - countdown_start_time))
+                    if countdown_remaining > 0:
+                        countdown_text = str(countdown_remaining)
+                    else:
+                        countdown_text = "GO!"
+                    self._draw_stereo_text(view, countdown_text, (0, 255, 255))
 
-                # Draw finger dot at same spiral-relative position on both eyes
-                spiral.draw_point_on_spiral(view, x, y, color=(255, 0, 255), radius=20)
+                elif state == TrialState.FOLLOWING:
+                    # Calculate dot position
+                    dot_elapsed = t_now - following_start_time
+                    dot_x, dot_y = self._get_dot_position_at_time(spiral, dot_elapsed, dot_speed_sec)
 
-                # Draw status and circles on both eyes
-                if not started:
-                    self._draw_stereo_text(view, "STANDBY", (128, 128, 128))
-                    self._draw_stereo_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0, 255, 255), 2, spiral.disparity_px)
-                elif started and not st.end_detected:
-                    self._draw_stereo_text(view, "RECORDING", (0, 220, 0))
-                else:
-                    self._draw_stereo_text(view, "END DETECTED", (255, 0, 0))
+                    # Draw moving dot
+                    spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=20)
 
-                self._draw_stereo_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255, 0, 255), 1, spiral.disparity_px)
+                    # Calculate distance from finger to dot
+                    dot_dist = math.hypot(x - dot_x, y - dot_y)
 
-                # Save data during recording (camera coordinates for analysis consistency)
-                if started and not st.end_detected:
+                    # Find nearest spiral point for reference
+                    xs, ys, s_sp, _ = spiral.nearest_point(x, y)
+                    err = math.hypot(x - xs, y - ys)
+
+                    # Record data
                     saver.write_frame_row([f"{t_now:.6f}", method, frame_idx,
-                                           f"{x_cam:.2f}", f"{y_cam:.2f}", f"{z:.1f}",
-                                           f"{xs:.2f}", f"{ys:.2f}", f"{s_sp:.2f}",
-                                           f"{err:.2f}", depth_win, z_valid])
+                                          f"{x_cam:.2f}", f"{y_cam:.2f}", f"{z:.1f}" if z is not None else "nan",
+                                          f"{dot_x:.2f}", f"{dot_y:.2f}", f"{dot_dist:.2f}",
+                                          f"{xs:.2f}", f"{ys:.2f}", f"{s_sp:.2f}",
+                                          f"{err:.2f}", depth_win, z_valid])
                     times.append(t_now)
-                    errs.append(err)
-                    depths.append(z)
+                    errs.append(dot_dist)  # Now tracking distance to dot, not spiral
+                    depths.append(z if z is not None else float('nan'))
                     depth_valid_flags.append(z_valid)
-                    path_xy.append((x, y))  # Display coords for visualization
+                    path_xy.append((x, y))
                     path_s.append(s_sp)
                     path_err.append(err)
+                    dot_positions.append((dot_x, dot_y))
+                    dot_distances.append(dot_dist)
 
-                if st.end_detected:
-                    trial_active=False
+                    # Show status
+                    self._draw_stereo_text(view, "FOLLOW THE DOT", (0, 220, 0))
+
+                elif state == TrialState.END_WAIT:
+                    self._draw_stereo_text(view, "COMPLETE - WAIT", (255, 128, 0))
+
+                elif state == TrialState.COMPLETE:
+                    self._draw_stereo_text(view, "TRIAL COMPLETE", (0, 0, 255))
+
             else:
-                # No tracking
-                st = dwell.update(t_now, 1e9, 1e9)
-                if not started:
-                    self._draw_stereo_text(view, "STANDBY (no track)", (128, 128, 128))
-                    self._draw_stereo_circle(view, sx, sy, self.cfg.dwell.StartRadiusPx, (0, 255, 255), 2, spiral.disparity_px)
+                # No tracking detected
+                if state == TrialState.COUNTDOWN:
+                    countdown_remaining = int(countdown_sec - (t_now - countdown_start_time)) if countdown_start_time else countdown_sec
+                    countdown_text = str(max(countdown_remaining, 0))
+                    self._draw_stereo_text(view, f"{countdown_text} (no track)", (128, 128, 128))
+                elif state == TrialState.FOLLOWING:
+                    # Still show moving dot even without tracking
+                    dot_elapsed = t_now - following_start_time
+                    dot_x, dot_y = self._get_dot_position_at_time(spiral, dot_elapsed, dot_speed_sec)
+                    spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=20)
+                    self._draw_stereo_text(view, "FOLLOW DOT (no track)", (165, 165, 0))
+                elif state == TrialState.END_WAIT:
+                    self._draw_stereo_text(view, "COMPLETE (no track)", (255, 128, 0))
                 else:
-                    self._draw_stereo_text(view, "RECORDING (no track)", (0, 165, 255))
-                    self._draw_stereo_circle(view, ex, ey, self.cfg.dwell.EndRadiusPx, (255, 0, 255), 1, spiral.disparity_px)
+                    self._draw_stereo_text(view, "NO TRACKING", (128, 128, 128))
 
             # Save and display
             if self.cfg.experiment.save_preview:

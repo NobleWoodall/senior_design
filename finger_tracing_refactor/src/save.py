@@ -11,6 +11,7 @@ class RunSaver:
         self.preview_path = self.run_dir / "preview.mp4"
         self.summary_path = self.run_dir / "summary.json"
         self.header = ["t_sec","method","frame_idx","x_px","y_px","z_mm",
+                       "dot_x_px","dot_y_px","dot_dist_px",
                        "x_spiral_px","y_spiral_px","s_spiral_px",
                        "err_px","depth_window","valid_depth_fraction"]
         self.csv_file = open(self.frames_path, 'w', newline='')

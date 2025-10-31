@@ -66,13 +66,30 @@ class Spiral3D:
             return self.disparity_px  # Use default
         return (self.IPD_MM * self.focal_length_px) / depth_mm
 
-    def draw_stereo(self, color_bgr: Tuple[int, int, int] = (0, 255, 255), thickness: int = 4) -> np.ndarray:
+    def draw_stereo(self, color_bgr: Tuple[int, int, int] = (0, 255, 255), thickness: int = 4,
+                    depth_mm: float = None, depth_close_mm: float = 400.0, depth_far_mm: float = 600.0) -> np.ndarray:
         """
-        Draw side-by-side stereo spiral.
+        Draw side-by-side stereo spiral with optional depth-based coloring.
+
+        Args:
+            color_bgr: Default color if depth is None
+            thickness: Line thickness
+            depth_mm: Current finger depth in mm (if None, uses default color)
+            depth_close_mm: Threshold for "too close" (blue)
+            depth_far_mm: Threshold for "too far" (red)
 
         Returns:
             3840x1080 BGR image with left and right eye views
         """
+        # Determine color based on depth
+        if depth_mm is not None and not math.isnan(depth_mm):
+            if depth_mm < depth_close_mm:
+                color_bgr = (255, 0, 0)  # Blue - too close
+            elif depth_mm > depth_far_mm:
+                color_bgr = (0, 0, 255)  # Red - too far
+            else:
+                color_bgr = (0, 255, 0)  # Green - good range
+
         sbs = np.zeros((self.EYE_HEIGHT, self.FULL_WIDTH, 3), dtype=np.uint8)
 
         # Draw left and right eyes

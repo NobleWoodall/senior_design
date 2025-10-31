@@ -27,12 +27,12 @@ class SpiralCfg:
     end_radius_px:int=18
 
 @dataclass
-class DwellCfg:
-    StartRadiusPx:int=18
-    StartDwellSec:float=1.0
-    EndRadiusPx:int=18
-    StopDwellSec:float=1.0
-    hysteresis_px:int=6
+class DotFollowCfg:
+    countdown_sec:int=3
+    dot_speed_sec_per_spiral:float=20.0
+    end_wait_sec:float=3.0
+    depth_close_mm:float=400.0
+    depth_far_mm:float=600.0
 
 @dataclass
 class MPcfg:
@@ -95,7 +95,7 @@ class CalibrationCfg:
 class AppConfig:
     camera:CameraCfg=field(default_factory=CameraCfg)
     spiral:SpiralCfg=field(default_factory=SpiralCfg)
-    dwell:DwellCfg=field(default_factory=DwellCfg)
+    dot_follow:DotFollowCfg=field(default_factory=DotFollowCfg)
     mediapipe:MPcfg=field(default_factory=MPcfg)
     color:ColorCfg=field(default_factory=ColorCfg)
     led:LEDCfg=field(default_factory=LEDCfg)
@@ -110,7 +110,7 @@ class AppConfig:
         return AppConfig(
             camera=CameraCfg(**d.get("camera",{})),
             spiral=SpiralCfg(**d.get("spiral",{})),
-            dwell=DwellCfg(**d.get("dwell",{})),
+            dot_follow=DotFollowCfg(**d.get("dot_follow",{})),
             mediapipe=MPcfg(**d.get("mediapipe",{})),
             color=ColorCfg(**d.get("color",{})),
             led=LEDCfg(**d.get("led",{})),
