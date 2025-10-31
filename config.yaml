@@ -19,12 +19,12 @@ spiral:
   line_thickness: 30
   color_bgr: [40, 220, 40]
 
-dwell:
-  StartRadiusPx: 25
-  StartDwellSec: 1.0
-  EndRadiusPx: 25
-  StopDwellSec: 1.0
-  hysteresis_px: 6
+dot_follow:
+  countdown_sec: 3
+  dot_speed_sec_per_spiral: 20.0
+  end_wait_sec: 3.0
+  depth_close_mm: 300.0
+  depth_far_mm: 500.0
 
 mediapipe:
   model_complexity: 1
@@ -54,8 +54,8 @@ led:
   min_area: 20               # Minimum blob area to filter noise
 
 experiment:
-  methods_order: ["hsv", "hsv"]  # "hsv" now uses LED tracking (red + brightness)
-  trials_per_method: 1          # ignored; runner forces 1
+  methods_order: ["mp"]  # Single method: "mp" for MediaPipe or "hsv" for LED tracking
+  trials_per_method: 1   # ignored; runner forces 1
   save_preview: false           # set true to write preview.mp4
   output_dir: "runs"
   metronome_bpm: 0

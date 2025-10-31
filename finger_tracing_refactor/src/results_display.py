@@ -20,31 +20,42 @@ def display_results(results_dict, overlay_path, output_dir):
 
     # Top: Path overlay image
     ax_img = fig.add_subplot(gs[0, :])
+    trial_summaries = results_dict.get('trial_summaries', {})
+
+    # Detect which methods are available
+    available_methods = [m for m in trial_summaries.keys() if trial_summaries.get(m)]
+    method_names = {'mp': 'MediaPipe', 'hsv': 'HSV'}
+
     if os.path.exists(overlay_path):
         img = plt.imread(overlay_path)
         ax_img.imshow(img)
         ax_img.axis('off')
-        ax_img.set_title('Traced Paths: MediaPipe (blue) vs HSV (red)', fontsize=12)
+        # Dynamic title based on available methods
+        if len(available_methods) > 1:
+            title = 'Traced Paths: ' + ' vs '.join([method_names.get(m, m.upper()) for m in available_methods])
+        elif len(available_methods) == 1:
+            title = f'Traced Path: {method_names.get(available_methods[0], available_methods[0].upper())}'
+        else:
+            title = 'Traced Paths'
+        ax_img.set_title(title, fontsize=12)
     else:
         ax_img.text(0.5, 0.5, 'Overlay image not found', ha='center', va='center')
         ax_img.axis('off')
 
-    # Middle-left: Error metrics comparison
+    # Middle-left: Error metrics comparison (now: Distance to Target metrics)
     ax_metrics = fig.add_subplot(gs[1, 0])
-    trial_summaries = results_dict.get('trial_summaries', {})
 
     methods = []
     rmse_vals = []
     median_vals = []
     p95_vals = []
 
-    for method in ['mp', 'hsv']:
-        if method in trial_summaries:
-            s = trial_summaries[method]
-            methods.append(method.upper())
-            rmse_vals.append(s.get('rmse_time_weighted', 0))
-            median_vals.append(s.get('err_px', {}).get('median', 0))
-            p95_vals.append(s.get('err_px', {}).get('p95', 0))
+    for method in available_methods:
+        s = trial_summaries[method]
+        methods.append(method.upper())
+        rmse_vals.append(s.get('rmse_time_weighted', 0))
+        median_vals.append(s.get('err_px', {}).get('median', 0))
+        p95_vals.append(s.get('err_px', {}).get('p95', 0))
 
     if methods:
         x = np.arange(len(methods))
@@ -54,8 +65,8 @@ def display_results(results_dict, overlay_path, output_dir):
         ax_metrics.bar(x, median_vals, width, label='Median', color='#2ecc71')
         ax_metrics.bar(x + width, p95_vals, width, label='P95', color='#e74c3c')
 
-        ax_metrics.set_ylabel('Error (pixels)', fontsize=10)
-        ax_metrics.set_title('Tracking Error Metrics', fontsize=11, fontweight='bold')
+        ax_metrics.set_ylabel('Distance to Target (pixels)', fontsize=10)
+        ax_metrics.set_title('Dot-Follow Accuracy Metrics', fontsize=11, fontweight='bold')
         ax_metrics.set_xticks(x)
         ax_metrics.set_xticklabels(methods)
         ax_metrics.legend(fontsize=9)
@@ -65,15 +76,14 @@ def display_results(results_dict, overlay_path, output_dir):
     ax_stats = fig.add_subplot(gs[1, 1])
     stats_text = "Performance Summary\n" + "="*30 + "\n\n"
 
-    for method in ['mp', 'hsv']:
-        if method in trial_summaries:
-            s = trial_summaries[method]
-            stats_text += f"{method.upper()} Tracking:\n"
-            stats_text += f"  Duration: {s.get('duration_sec', 0):.2f}s\n"
-            stats_text += f"  Samples: {s.get('sample_count', 0)}\n"
-            stats_text += f"  FPS: {s.get('fps_avg', 0):.1f}\n"
-            stats_text += f"  Loss Rate: {s.get('tracking_loss_rate', 0)*100:.1f}%\n"
-            stats_text += f"  Mean Depth: {s.get('mean_depth_mm', 0):.1f}mm\n\n"
+    for method in available_methods:
+        s = trial_summaries[method]
+        stats_text += f"{method.upper()} Tracking:\n"
+        stats_text += f"  Duration: {s.get('duration_sec', 0):.2f}s\n"
+        stats_text += f"  Samples: {s.get('sample_count', 0)}\n"
+        stats_text += f"  FPS: {s.get('fps_avg', 0):.1f}\n"
+        stats_text += f"  Loss Rate: {s.get('tracking_loss_rate', 0)*100:.1f}%\n"
+        stats_text += f"  Mean Depth: {s.get('mean_depth_mm', 0):.1f}mm\n\n"
 
     ax_stats.text(0.05, 0.95, stats_text, transform=ax_stats.transAxes,
                   fontsize=9, verticalalignment='top', fontfamily='monospace',
@@ -89,8 +99,8 @@ def display_results(results_dict, overlay_path, output_dir):
         rms_vals_sig = []
         rms_tremor_vals = []
 
-        for method in ['mp', 'hsv']:
-            if method in signal_analysis:
+        for method in signal_analysis.keys():
+            if signal_analysis.get(method):
                 methods_sig.append(method.upper())
                 rms_vals_sig.append(signal_analysis[method].get('rms_px', 0))
                 rms_tremor_vals.append(signal_analysis[method].get('rms_tremor_band_px', 0))
@@ -98,13 +108,15 @@ def display_results(results_dict, overlay_path, output_dir):
         if methods_sig:
             x = np.arange(len(methods_sig))
             width = 0.35
-            colors = ['#3498db', '#e74c3c']
+            # Dynamic colors based on number of methods
+            color_map = {'mp': '#3498db', 'hsv': '#e74c3c'}
+            colors = [color_map.get(m.lower(), '#95a5a6') for m in methods_sig]
 
             bars1 = ax_rms.bar(x - width/2, rms_vals_sig, width, label='Raw RMS', color=colors, alpha=0.7)
             bars2 = ax_rms.bar(x + width/2, rms_tremor_vals, width, label='Tremor Band RMS',
                              color=colors, alpha=0.4, hatch='//')
 
-            ax_rms.set_ylabel('RMS Error (pixels)', fontsize=10)
+            ax_rms.set_ylabel('RMS Distance (pixels)', fontsize=10)
             ax_rms.set_title('Signal RMS: Raw vs Tremor Band (4-10 Hz)', fontsize=11, fontweight='bold')
             ax_rms.set_xticks(x)
             ax_rms.set_xticklabels(methods_sig)
@@ -116,11 +128,13 @@ def display_results(results_dict, overlay_path, output_dir):
 
     psd_plotted = False
     tremor_band = [4.0, 10.0]  # Default
-    for method, color in zip(['mp', 'hsv'], ['#3498db', '#e74c3c']):
-        if method in signal_analysis:
+    color_map = {'mp': '#3498db', 'hsv': '#e74c3c'}
+    for method in signal_analysis.keys():
+        if signal_analysis.get(method):
             # Use the band-pass filtered PSD to remove low-frequency drift
             psd_filt_data = signal_analysis[method].get('psd_tremor_filtered', [])
             tremor_band = signal_analysis[method].get('tremor_band_hz', [4.0, 10.0])
+            color = color_map.get(method, '#95a5a6')
             if psd_filt_data:
                 freqs_f = [p['freq_hz'] for p in psd_filt_data]
                 psds_f = [p['psd'] for p in psd_filt_data]

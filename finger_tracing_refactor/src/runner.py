@@ -385,8 +385,8 @@ class ExperimentRunner:
         with open(os.path.join(base_out, "intrinsics.json"), "w") as f:
             json.dump(intr, f, indent=2)
 
-        all_summaries = {"mp": [], "hsv": []}
-        all_paths = {"mp": None, "hsv": None}
+        all_summaries = {m: [] for m in order}
+        all_paths = {m: None for m in order}
         try:
             for method in order:
                 for _ in range(trials):
@@ -456,11 +456,11 @@ class ExperimentRunner:
             import traceback
             traceback.print_exc()
 
-        # Consolidated results
+        # Consolidated results - dynamically include only methods that were run
         consolidated_results = {
             "trial_summaries": {
-                "mp": all_summaries["mp"][0] if all_summaries["mp"] else {},
-                "hsv": all_summaries["hsv"][0] if all_summaries["hsv"] else {}
+                m: all_summaries[m][0] if all_summaries.get(m) and all_summaries[m] else {}
+                for m in all_summaries.keys()
             },
             "signal_analysis": signal_data,
             "stereo_3d": {
@@ -473,7 +473,7 @@ class ExperimentRunner:
             json.dump(consolidated_results, f, indent=2)
 
         print("\n=== Results Summary ===")
-        for m in ["mp", "hsv"]:
+        for m in all_summaries.keys():
             if all_summaries[m]:
                 s = all_summaries[m][0]
                 rmse = s.get("rmse_time_weighted", 0)

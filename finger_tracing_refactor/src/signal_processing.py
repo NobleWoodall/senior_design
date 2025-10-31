@@ -12,15 +12,32 @@ def draw_paths_overlay(width:int, height:int, spiral_pts:np.ndarray,
     if spiral_pts is not None and len(spiral_pts) > 1:
         pts = spiral_pts.astype(np.int32).reshape(-1,1,2)
         cv2.polylines(canvas, [pts], False, (200,200,200), 2)
+
     def _poly(points, color):
         if len(points) >= 2:
             p = np.array(points, dtype=np.int32).reshape(-1,1,2)
             cv2.polylines(canvas, [p], False, color, 3, cv2.LINE_AA)
             cv2.circle(canvas, tuple(p[0,0]), 5, color, -1)
             cv2.circle(canvas, tuple(p[-1,0]), 5, color, -1)
-    _poly(path_mp,  (255, 0, 0))   # bgr order
-    _poly(path_hsv, (0, 0, 225))   # red-ish
-    cv2.putText(canvas, "MediaPipe (blue) / HSV (red)", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 2, cv2.LINE_AA)
+
+    # Determine which methods have data and create label
+    methods_drawn = []
+    if path_mp and len(path_mp) >= 2:
+        _poly(path_mp, (255, 0, 0))  # Blue in BGR
+        methods_drawn.append("MediaPipe (blue)")
+    if path_hsv and len(path_hsv) >= 2:
+        _poly(path_hsv, (0, 0, 225))  # Red in BGR
+        methods_drawn.append("HSV (red)")
+
+    # Dynamic label based on what was drawn
+    if len(methods_drawn) == 2:
+        label = " / ".join(methods_drawn)
+    elif len(methods_drawn) == 1:
+        label = methods_drawn[0].replace(" (blue)", "").replace(" (red)", "")
+    else:
+        label = "No tracking data"
+
+    cv2.putText(canvas, label, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 2, cv2.LINE_AA)
     cv2.imwrite(out_path, canvas)
 
 def _resample_vs_time(t_list, e_list, target_fs=30.0):
@@ -97,7 +114,7 @@ def analyze_after_runs(paths:Dict[str,Dict[str,list]], spiral_pts, w, h, out_dir
     out.mkdir(parents=True, exist_ok=True)
     draw_paths_overlay(w,h,spiral_pts, paths.get('mp',{}).get('xy',[]), paths.get('hsv',{}).get('xy',[]), str(out/"paths_overlay.png"))
     summary = {}
-    for m in ["mp","hsv"]:
+    for m in paths.keys():
         t_list = paths.get(m,{}).get("times",[])
         e_list = paths.get(m,{}).get("err",[])
         t_grid, e_resamp = _resample_vs_time(t_list, e_list, target_fs=target_fs)
