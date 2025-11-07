@@ -72,9 +72,12 @@ class RealSenseIO:
                 sensor.set_option(rs.option.exposure, float(self.exposure))
             else:
                 sensor.set_option(rs.option.enable_auto_exposure, 1)
+            # Disable auto-white-balance for consistent LED brightness
+            sensor.set_option(rs.option.enable_auto_white_balance, 1)
+
         except Exception:
             pass
-        time.sleep(0.2)
+        time.sleep(1.0)
 
     def stop(self):
         try: 

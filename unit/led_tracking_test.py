@@ -22,11 +22,11 @@ class LEDTracker:
         self.mode = 'combined'
 
         # HSV thresholds for red LED - wider range to catch all reds
-        self.hsv_low = np.array([0, 100, 150])    # Lower saturation, lower value to catch more reds
-        self.hsv_high = np.array([20, 255, 255])  # Wider hue range (0-20 catches orange-reds)
+        self.hsv_low = np.array([4, 0, 227])    # Lower saturation, lower value to catch more reds
+        self.hsv_high = np.array([35, 255, 255])  # Wider hue range (0-20 catches orange-reds)
 
         # Brightness threshold (0-255) - only very bright objects
-        self.brightness_threshold = 180
+        self.brightness_threshold = 141
 
         # Morphological operations
         self.morph_kernel_size = 3
@@ -142,14 +142,14 @@ def main():
 
     # Initialize camera
     camera = RealSenseIO(
-        width=640,
-        height=480,
+        width=1920,
+        height=1080,
         fps=30,
         depth_width=640,
         depth_height=480,
         depth_fps=30,
         use_auto_exposure=False,
-        exposure=50  # Low exposure makes LED stand out
+        exposure=30  # Low exposure makes LED stand out
     )
 
     try:

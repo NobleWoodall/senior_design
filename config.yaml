@@ -2,86 +2,91 @@ camera:
   width: 1920
   height: 1080
   fps: 30
-  use_auto_exposure: false  # Lock exposure for consistent LED tracking
-  exposure: 50  # Lower value = darker image, LED stands out more
+  use_auto_exposure: false
+  exposure: 150
   depth_width: 640
   depth_height: 480
   depth_fps: 30
   depth_window: 5
   min_depth_mm: 200
   max_depth_mm: 800
-
 spiral:
   a: 30.0
   b: 35.0
   turns: 2
   theta_step: 0.01
   line_thickness: 30
-  color_bgr: [40, 220, 40]
-
+  color_bgr:
+  - 40
+  - 220
+  - 40
 dot_follow:
   countdown_sec: 3
   dot_speed_sec_per_spiral: 20.0
   end_wait_sec: 3.0
   depth_close_mm: 300.0
   depth_far_mm: 500.0
-
+  display_smooth_alpha: 0.3
 mediapipe:
   model_complexity: 1
   detection_confidence: 0.9
   tracking_confidence: 0.9
-  ema_alpha: 1.0    # 1.0 disables smoothing (lowest lag)
-
 color:
-  # HSV color tracking settings (for HSV mode)
-  hsv_low:  [57, 155, 29]
-  hsv_high: [137, 255, 139]
+  hsv_low:
+  - 57
+  - 155
+  - 29
+  hsv_high:
+  - 137
+  - 255
+  - 139
   morph_kernel: 3
   min_area: 60
-  use_depth_filter: true    # Filter out colors outside depth range
-  # Optical flow fallback
+  use_depth_filter: true
   use_flow_fallback: false
   flow_win: 15
   flow_max_level: 2
-
 led:
-  # LED tracking settings (combined red HSV + brightness)
-  # Filters out white ceiling lights by requiring BOTH red AND bright
-  hsv_low: [0, 100, 150]     # H: red hue, S: high saturation, V: bright
-  hsv_high: [20, 255, 255]   # Narrow hue range for pure red (0-20 degrees)
-  brightness_threshold: 20  # Minimum brightness (0-255) - strict
+  hsv_low:
+  - 4
+  - 0
+  - 227
+  hsv_high:
+  - 35
+  - 255
+  - 255
+  brightness_threshold: 221
   morph_kernel: 3
-  min_area: 60               # Minimum blob area to filter noise (scaled for 1920x1080)
-
+  min_area: 20
 experiment:
-  methods_order: ["mp"]  # Single method: "mp" for MediaPipe or "hsv" for LED tracking
-  trials_per_method: 1   # ignored; runner forces 1
-  save_preview: false           # set true to write preview.mp4
-  output_dir: "runs"
+  methods_order:
+  - hsv
+  trials_per_method: 2
+  save_preview: false
+  output_dir: runs
   metronome_bpm: 0
-  max_jump_px: 180            # jump gate threshold (scaled for 1920x1080 resolution)
-
+  max_jump_px: 300
 tremor_analysis:
-  band_low_hz: 4.0           # lower bound of tremor frequency band
-  band_high_hz: 10.0         # upper bound of tremor frequency band
-
+  band_low_hz: 4.0
+  band_high_hz: 10.0
 stereo_3d:
-  target_depth_m: 0.5        # Spiral perceived depth in meters for XReal glasses
-  disparity_offset_px: -600     # Manual disparity adjustment (+ closer, - farther)
-  flip_x: false               # Flip horizontal axis (for head-mounted camera)
-  flip_y: false              # Flip vertical axis
-  finger_scale_x: 0.75      # FOV compensation (Display 46° / Camera 69° ≈ 0.67)
-  finger_scale_y: 1       # FOV compensation vertical
-
+  target_depth_m: 0.5
+  disparity_offset_px: -600
+  flip_x: false
+  flip_y: false
+  finger_scale_x: 0.75
+  finger_scale_y: 1
 calibration:
-  enabled: true             # Enable/disable calibration transform
-  calibration_file: "calibration.json"  # Path to calibration file (relative to output_dir)
-  # Grid calibration: 7x7 grid (49 points) across full 1920x1080 display
-  # Position LED at each yellow dot, press SPACE or wait 3s to auto-record
-  # Purple dot shows tracking (doesn't need to be close to yellow - that's what calibration fixes!)
-  # Takes ~12-15 minutes total
-  dot_speed_revolutions_per_sec: .03  # (Legacy parameter - not used in grid calibration)
-  num_traces: 2              # (Legacy parameter - not used in grid calibration)
-  countdown_sec: 3           # Countdown duration before calibration starts
-
+  enabled: true
+  calibration_file: calibration.json
+  dot_speed_revolutions_per_sec: 0.03
+  num_traces: 2
+  countdown_sec: 3
+session_metadata:
+  patient_id: Andrew
+  session_type: baseline
+  sonication_number: 0
+  date: 'November 7, 2025'
+  clinician: 'Andrew Toader'
+  notes: 'Patient wants to have weaker tremors'
 show_live_preview: true

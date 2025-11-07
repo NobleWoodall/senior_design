@@ -1,5 +1,16 @@
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Any
+import time
+
+@dataclass
+class SessionMetadata:
+    """Metadata for clinical session tracking (MRgFUS)"""
+    patient_id: str = "ANON"
+    session_type: str = "baseline"  # baseline, post_sonication, follow_up
+    sonication_number: int = 0
+    date: str = field(default_factory=lambda: time.strftime("%Y-%m-%d"))
+    clinician: str = ""
+    notes: str = ""
 
 @dataclass
 class CameraCfg:
@@ -33,13 +44,13 @@ class DotFollowCfg:
     end_wait_sec:float=3.0
     depth_close_mm:float=400.0
     depth_far_mm:float=600.0
+    display_smooth_alpha:float=0.3  # Display smoothing (0.0=max smooth, 1.0=no smooth)
 
 @dataclass
 class MPcfg:
     model_complexity:int=1
     detection_confidence:float=0.9
     tracking_confidence:float=0.9
-    ema_alpha:float=1.0
 
 @dataclass
 class ColorCfg:
@@ -103,6 +114,7 @@ class AppConfig:
     tremor_analysis:TremorAnalysisCfg=field(default_factory=TremorAnalysisCfg)
     stereo_3d:Stereo3DCfg=field(default_factory=Stereo3DCfg)
     calibration:CalibrationCfg=field(default_factory=CalibrationCfg)
+    session_metadata:SessionMetadata=field(default_factory=SessionMetadata)
     show_live_preview:bool=True
 
     @staticmethod
@@ -118,5 +130,6 @@ class AppConfig:
             tremor_analysis=TremorAnalysisCfg(**d.get("tremor_analysis",{})),
             stereo_3d=Stereo3DCfg(**d.get("stereo_3d",{})),
             calibration=CalibrationCfg(**d.get("calibration",{})),
+            session_metadata=SessionMetadata(**d.get("session_metadata",{})),
             show_live_preview=bool(d.get("show_live_preview", True)),
         )

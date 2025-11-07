@@ -1,6 +1,7 @@
 import os
 import json
 import math
+import time
 import numpy as np
 import cv2
 from dataclasses import asdict
@@ -15,8 +16,12 @@ from .depth_utils import median_depth_mm
 from .metrics import summarize_errors
 from .save import RunSaver
 from .signal_processing import analyze_after_runs
-from .results_display import display_results
+from .html_results_viewer import generate_html_report
+import sys
+import webbrowser
 from .calibration_utils import load_calibration, apply_calibration
+from .directional_analysis import analyze_directional_tremor
+from .session_manager import get_baseline_for_patient, calculate_improvements
 
 
 class TrialState(Enum):
@@ -128,6 +133,9 @@ class ExperimentRunner:
         dot_positions = []
         dot_distances = []
 
+        # Buffer for CSV rows (write after trial to avoid I/O in hot loop)
+        csv_buffer = []
+
         frame_idx = 0
         color0, _, _ = rsio.get_aligned()
         if color0 is None:
@@ -152,7 +160,27 @@ class ExperimentRunner:
         trial_active = True
         current_depth = None
 
+        # Display smoothing (for visualization only, doesn't affect recorded data)
+        display_smooth_alpha = self.cfg.dot_follow.display_smooth_alpha
+        display_smooth_pos = None
+
+        # Pre-render base spiral views (one for each depth state)
+        print("[Optimization] Pre-rendering spiral views...")
+        base_spiral_normal = spiral.draw_stereo(
+            color_bgr=tuple(self.cfg.spiral.color_bgr),
+            thickness=self.cfg.spiral.line_thickness,
+            depth_mm=None,
+            depth_close_mm=self.cfg.dot_follow.depth_close_mm,
+            depth_far_mm=self.cfg.dot_follow.depth_far_mm
+        )
+        print("[Optimization] Spiral pre-rendered, will reuse each frame")
+
+        # Timing instrumentation
+        frame_times = []
+        slow_frames = 0
+
         while trial_active:
+            t_frame_start = time.perf_counter()
             color, depth, t_now = rsio.get_aligned()
             if color is None:
                 continue
@@ -208,14 +236,8 @@ class ExperimentRunner:
             else:
                 current_depth = None
 
-            # Render stereo 3D spiral with depth-based coloring
-            view = spiral.draw_stereo(
-                color_bgr=tuple(self.cfg.spiral.color_bgr),
-                thickness=self.cfg.spiral.line_thickness,
-                depth_mm=current_depth,
-                depth_close_mm=self.cfg.dot_follow.depth_close_mm,
-                depth_far_mm=self.cfg.dot_follow.depth_far_mm
-            )
+            # Use pre-rendered spiral (fast copy instead of re-rendering)
+            view = base_spiral_normal.copy()
 
             # Process finger position and draw visuals
             if pt is not None:
@@ -245,8 +267,17 @@ class ExperimentRunner:
                 z = current_depth
                 z_valid = float(not math.isnan(z)) if z is not None else 0.0
 
-                # Draw finger dot
-                spiral.draw_point_on_spiral(view, x, y, color=(255, 0, 255), radius=15)
+                # Apply smoothing to display position (does NOT affect recorded data)
+                if display_smooth_pos is None:
+                    display_smooth_pos = np.array([x, y], dtype=np.float32)
+                else:
+                    display_smooth_pos = display_smooth_alpha * np.array([x, y]) + (1 - display_smooth_alpha) * display_smooth_pos
+
+                x_display = float(display_smooth_pos[0])
+                y_display = float(display_smooth_pos[1])
+
+                # Draw finger dot (using smoothed position for display)
+                spiral.draw_point_on_spiral(view, x_display, y_display, color=(255, 0, 255), radius=15)
 
                 # State-specific visualization and data recording
                 if state == TrialState.COUNTDOWN:
@@ -273,12 +304,13 @@ class ExperimentRunner:
                     xs, ys, s_sp, _ = spiral.nearest_point(x, y)
                     err = math.hypot(x - xs, y - ys)
 
-                    # Record data
-                    saver.write_frame_row([f"{t_now:.6f}", method, frame_idx,
-                                          f"{x_cam:.2f}", f"{y_cam:.2f}", f"{z:.1f}" if z is not None else "nan",
-                                          f"{dot_x:.2f}", f"{dot_y:.2f}", f"{dot_dist:.2f}",
-                                          f"{xs:.2f}", f"{ys:.2f}", f"{s_sp:.2f}",
-                                          f"{err:.2f}", depth_win, z_valid])
+                    # Buffer data (write after trial to avoid I/O overhead)
+                    # NOTE: Uses RAW unsmoothed positions (x, y) for accurate tremor analysis
+                    csv_buffer.append([f"{t_now:.6f}", method, frame_idx,
+                                      f"{x_cam:.2f}", f"{y_cam:.2f}", f"{z:.1f}" if z is not None else "nan",
+                                      f"{dot_x:.2f}", f"{dot_y:.2f}", f"{dot_dist:.2f}",
+                                      f"{xs:.2f}", f"{ys:.2f}", f"{s_sp:.2f}",
+                                      f"{err:.2f}", depth_win, z_valid])
                     times.append(t_now)
                     errs.append(dot_dist)  # Now tracking distance to dot, not spiral
                     depths.append(z if z is not None else float('nan'))
@@ -299,7 +331,9 @@ class ExperimentRunner:
                     self._draw_stereo_text(view, "TRIAL COMPLETE", (0, 0, 255))
 
             else:
-                # No tracking detected
+                # No tracking detected - reset smoothing
+                display_smooth_pos = None
+
                 if state == TrialState.COUNTDOWN:
                     countdown_remaining = int(countdown_sec - (t_now - countdown_start_time)) if countdown_start_time else countdown_sec
                     countdown_text = str(max(countdown_remaining, 0))
@@ -309,6 +343,8 @@ class ExperimentRunner:
                     dot_elapsed = t_now - following_start_time
                     dot_x, dot_y = self._get_dot_position_at_time(spiral, dot_elapsed, dot_speed_sec)
                     spiral.draw_point_on_spiral(view, dot_x, dot_y, color=(0, 255, 255), radius=20)
+                    # Record dot position even when tracking is lost
+                    dot_positions.append((dot_x, dot_y))
                     self._draw_stereo_text(view, "FOLLOW DOT (no track)", (165, 165, 0))
                 elif state == TrialState.END_WAIT:
                     self._draw_stereo_text(view, "COMPLETE (no track)", (255, 128, 0))
@@ -325,7 +361,9 @@ class ExperimentRunner:
                     cv2.resizeWindow("XReal_3D_Tracking", self.FULL_WIDTH, self.FULL_HEIGHT)
                     print("Window created. Drag to XReal display and press 'f' for fullscreen.\n")
 
-                cv2.imshow("XReal_3D_Tracking", view)
+                # Downscale for display to reduce rendering overhead (50% size)
+                view_display = cv2.resize(view, (self.FULL_WIDTH // 2, self.FULL_HEIGHT // 2), interpolation=cv2.INTER_LINEAR)
+                cv2.imshow("XReal_3D_Tracking", view_display)
 
                 # Handle keyboard input
                 key = cv2.waitKey(1) & 0xFF
@@ -345,15 +383,47 @@ class ExperimentRunner:
 
             frame_idx += 1
 
+            # Measure frame processing time
+            t_frame_end = time.perf_counter()
+            frame_time_ms = (t_frame_end - t_frame_start) * 1000
+            frame_times.append(frame_time_ms)
+
+            # Track slow frames (> 33ms budget for 30fps)
+            if frame_time_ms > 33.0:
+                slow_frames += 1
+                if slow_frames <= 5:  # Only print first 5 to avoid spam
+                    print(f"[TIMING] Frame {frame_idx} took {frame_time_ms:.1f}ms (> 33ms budget)")
+                elif slow_frames == 6:
+                    print(f"[TIMING] More slow frames detected... (suppressing further warnings)")
+
         if show_live_preview:
             try:
                 cv2.destroyWindow("XReal_3D_Tracking")
             except Exception:
                 pass
 
+        # Print timing summary
+        if frame_times:
+            avg_time = np.mean(frame_times)
+            max_time = np.max(frame_times)
+            min_time = np.min(frame_times)
+            p95_time = np.percentile(frame_times, 95)
+            slow_pct = (slow_frames / len(frame_times)) * 100
+            print(f"\n[TIMING SUMMARY]")
+            print(f"  Frames processed: {len(frame_times)}")
+            print(f"  Avg: {avg_time:.1f}ms | Min: {min_time:.1f}ms | Max: {max_time:.1f}ms | P95: {p95_time:.1f}ms")
+            print(f"  Slow frames (>33ms): {slow_frames}/{len(frame_times)} ({slow_pct:.1f}%)")
+            print(f"  Target: 33.3ms for 30fps\n")
+
+        # Write buffered CSV data after trial completes
+        print("[Data] Writing buffered CSV data...")
+        for row in csv_buffer:
+            saver.write_frame_row(row)
+        print(f"[Data] Wrote {len(csv_buffer)} rows to CSV")
+
         summ = summarize_errors(times, errs, depths, depth_valid_flags)
         saver.save_summary(summ)
-        path = {"xy": path_xy, "s": path_s, "err": path_err, "times": times}
+        path = {"xy": path_xy, "s": path_s, "err": path_err, "times": times, "dot_xy": dot_positions}
         return summ, path
 
     def run_all(self):
@@ -362,6 +432,13 @@ class ExperimentRunner:
                            cfg.camera.depth_width, cfg.camera.depth_height, cfg.camera.depth_fps,
                            cfg.camera.use_auto_exposure, cfg.camera.exposure)
         rsio.start()
+
+        # Warmup: flush camera buffers and let exposure settle
+        print("[Camera] Warming up (flushing buffers)...")
+        for _ in range(30):  # 30 frames @ 30fps = 1 second
+            rsio.get_aligned()
+        print("[Camera] Ready")
+
         intr = rsio.get_intrinsics()
 
         # Create 3D stereo spiral
@@ -373,7 +450,7 @@ class ExperimentRunner:
         )
 
         mp_tracker = MediaPipeTracker(cfg.mediapipe.model_complexity, cfg.mediapipe.detection_confidence,
-                                      cfg.mediapipe.tracking_confidence, cfg.mediapipe.ema_alpha)
+                                      cfg.mediapipe.tracking_confidence)
         hsv_tracker = LEDTracker(tuple(cfg.led.hsv_low), tuple(cfg.led.hsv_high),
                                 cfg.led.brightness_threshold, cfg.led.morph_kernel, cfg.led.min_area)
 
@@ -387,6 +464,7 @@ class ExperimentRunner:
 
         all_summaries = {m: [] for m in order}
         all_paths = {m: None for m in order}
+        all_session_dirs = {m: [] for m in order}  # Track session directories for directional analysis
         try:
             for method in order:
                 for _ in range(trials):
@@ -403,6 +481,7 @@ class ExperimentRunner:
                                                             cfg.experiment.metronome_bpm, cfg.show_live_preview)
                     else:
                         raise ValueError(f"Unknown method: {method}")
+                    all_session_dirs[method].append(str(saver.run_dir))  # Store session directory
                     saver.close()
                     all_summaries[method].append(summ)
                     all_paths[method] = path
@@ -417,10 +496,7 @@ class ExperimentRunner:
         # Post-analysis: Generate paths overlay and signal analysis
         signal_data = {}
         try:
-            from .signal_processing import draw_paths_overlay, analyze_after_runs
-
-            # Generate paths overlay image
-            overlay_path = os.path.join(base_out, "paths_overlay.png")
+            from .signal_processing import analyze_after_runs
 
             # Transform spiral points to display coordinates for visualization
             spiral_pts_display = spiral.spiral_points.copy()
@@ -429,16 +505,7 @@ class ExperimentRunner:
             spiral_pts_display[:, 0] += cx
             spiral_pts_display[:, 1] += cy
 
-            # Get path data
-            path_mp = all_paths.get("mp", {}).get("xy", [])
-            path_hsv = all_paths.get("hsv", {}).get("xy", [])
-
-            # Draw overlay
-            draw_paths_overlay(self.EYE_WIDTH, self.EYE_HEIGHT, spiral_pts_display,
-                             path_mp, path_hsv, overlay_path)
-            print(f"Paths overlay saved: {overlay_path}")
-
-            # Generate signal analysis (tremor, FFT, PSD)
+            # Generate signal analysis and paths overlay (overlay is generated inside analyze_after_runs)
             signal_data = analyze_after_runs(
                 all_paths,
                 spiral_pts_display,
@@ -456,13 +523,75 @@ class ExperimentRunner:
             import traceback
             traceback.print_exc()
 
+        # Directional tremor analysis
+        directional_data = {}
+        try:
+            print("Running directional tremor analysis...")
+            for method, session_dirs in all_session_dirs.items():
+                if session_dirs:
+                    # Use the most recent session for directional analysis
+                    latest_session_dir = session_dirs[-1]
+                    frames_csv = os.path.join(latest_session_dir, 'frames.csv')
+
+                    if os.path.exists(frames_csv):
+                        directional_results = analyze_directional_tremor(
+                            frames_csv,
+                            method=method,
+                            tremor_band=(cfg.tremor_analysis.band_low_hz, cfg.tremor_analysis.band_high_hz)
+                        )
+                        directional_data[method] = directional_results
+                        print(f"  {method}: Worst tremor at {directional_results['worst_angle']:.1f}° "
+                              f"(power: {directional_results['worst_power']:.2f})")
+        except Exception as e:
+            print(f"Directional analysis failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # Calculate improvements from baseline (if applicable)
+        improvement_data = {}
+        try:
+            if cfg.session_metadata.session_type != 'baseline':
+                baseline_session = get_baseline_for_patient(
+                    cfg.experiment.output_dir,
+                    cfg.session_metadata.patient_id
+                )
+
+                if baseline_session:
+                    baseline_results_path = os.path.join(baseline_session['path'], 'results.json')
+                    if os.path.exists(baseline_results_path):
+                        with open(baseline_results_path, 'r') as f:
+                            baseline_results = json.load(f)
+
+                        # Create temporary current results for comparison
+                        temp_current = {
+                            "signal_analysis": signal_data,
+                            "directional_analysis": directional_data
+                        }
+
+                        for method in signal_data.keys():
+                            improvements = calculate_improvements(
+                                baseline_results,
+                                temp_current,
+                                method=method
+                            )
+                            improvement_data[method] = improvements
+
+                            summary = improvements.get('summary', {})
+                            reduction = summary.get('primary_metric_reduction_pct', 0)
+                            print(f"  {method}: {reduction:.1f}% tremor reduction from baseline")
+        except Exception as e:
+            print(f"Improvement calculation failed: {e}")
+
         # Consolidated results - dynamically include only methods that were run
         consolidated_results = {
+            "session_metadata": asdict(cfg.session_metadata),
             "trial_summaries": {
                 m: all_summaries[m][0] if all_summaries.get(m) and all_summaries[m] else {}
                 for m in all_summaries.keys()
             },
             "signal_analysis": signal_data,
+            "directional_analysis": directional_data,
+            "improvements": improvement_data,
             "stereo_3d": {
                 "target_depth_m": spiral.target_depth_m,
                 "disparity_px": spiral.disparity_px
@@ -484,11 +613,21 @@ class ExperimentRunner:
 
         print(f"\nSaved: {base_out}/results.json")
 
-        # Display results screen
+        # Generate HTML report and open in browser
         try:
-            overlay_path = os.path.join(base_out, "paths_overlay.png")
-            display_results(consolidated_results, overlay_path, base_out)
+            results_json_path = os.path.join(base_out, "results.json")
+            html_path = generate_html_report(results_json_path)
+
+            print(f"\n=== HTML Report Generated ===")
+            print(f"Report saved to: {html_path}")
+            print("Opening in browser...")
+
+            # Open in browser
+            webbrowser.open(f'file:///{os.path.abspath(html_path)}')
+
         except Exception as e:
-            print(f"Could not display results screen: {e}")
+            print(f"Could not generate HTML report: {e}")
+            import traceback
+            traceback.print_exc()
 
         return consolidated_results
