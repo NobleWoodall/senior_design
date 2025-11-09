@@ -5,6 +5,18 @@ import cv2 as cv
 import numpy as np
 import time
 import math
+import yaml
+from pathlib import Path
+
+# --- Load config ---
+config_path = Path(__file__).parent.parent / "config.yaml"
+if config_path.exists():
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    print(f"Loaded config from {config_path}")
+else:
+    config = {}
+    print("Warning: config.yaml not found, using defaults")
 
 # --- Display setup ---
 FULL_W, FULL_H = 3840, 1080      # Full-SBS canvas
@@ -13,43 +25,41 @@ EYE_W, EYE_H   = FULL_W // 2, FULL_H
 # --- XReal glasses stereoscopic parameters ---
 # Based on XReal Air/Air Pro specs
 IPD_MM = 63.0                     # Inter-pupillary distance (average adult: 63mm)
-SCREEN_WIDTH_MM = 201.0           # XReal effective screen width at 4m (approximately)
 FOV_HORIZONTAL_DEG = 46.0         # XReal horizontal field of view
-TARGET_DEPTH_M = 0.5              # Target perceived depth (matching Unity's requiredZDistance)
 
-# Calculate pixels per degree
-PIXELS_PER_DEGREE = EYE_W / FOV_HORIZONTAL_DEG
+# Load from config
+stereo_config = config.get('stereo_3d', {})
+TARGET_DEPTH_M = stereo_config.get('target_depth_m', 0.5)
+DISPARITY_OFFSET_PX = stereo_config.get('disparity_offset_px', 0.0)
 
 # Calculate disparity for target depth
 # Formula: disparity_px = (IPD_mm * focal_length_px) / depth_mm
 # Where focal_length_px ≈ screen_width_px / (2 * tan(FOV/2))
 FOCAL_LENGTH_PX = EYE_W / (2.0 * math.tan(math.radians(FOV_HORIZONTAL_DEG / 2.0)))
-DISPARITY_PX = (IPD_MM * FOCAL_LENGTH_PX) / (TARGET_DEPTH_M * 1000.0)
+BASE_DISPARITY_PX = (IPD_MM * FOCAL_LENGTH_PX) / (TARGET_DEPTH_M * 1000.0)
+DISPARITY_PX = BASE_DISPARITY_PX + DISPARITY_OFFSET_PX
 
 print("Stereoscopic parameters:")
 print(f"  Target depth: {TARGET_DEPTH_M}m")
 print(f"  Focal length: {FOCAL_LENGTH_PX:.1f}px")
-print(f"  Disparity: {DISPARITY_PX:.1f}px")
-print(f"  Pixels per degree: {PIXELS_PER_DEGREE:.1f}")
+print(f"  Base disparity: {BASE_DISPARITY_PX:.1f}px")
+print(f"  Disparity offset: {DISPARITY_OFFSET_PX:.1f}px")
+print(f"  Final disparity: {DISPARITY_PX:.1f}px")
 
-# --- Unity spiral parameters ---
-# Matching Unity's XRSpiralOverlay settings
-SPIRAL_SIZE_M = 0.15              # spiralSize in Unity (increased from 9cm to 15cm diameter)
-NUMBER_OF_COILS = 3               # numberOfCoils in Unity
-SPIRAL_POINTS = 1000              # spiralPoints in Unity
-SPIRAL_COLOR_BGR = (0, 255, 255) # Yellow (Unity's spiralColor)
-SPIRAL_THICKNESS = 4              # Line thickness (increased from 3 to 4)
-
-# Calculate spiral size in pixels at target depth
-# Angular size = 2 * arctan(physical_size / (2 * distance))
-ANGULAR_SIZE_RAD = 2.0 * math.atan(SPIRAL_SIZE_M / (2.0 * TARGET_DEPTH_M))
-ANGULAR_SIZE_DEG = math.degrees(ANGULAR_SIZE_RAD)
-SPIRAL_RADIUS_PX = ANGULAR_SIZE_DEG * PIXELS_PER_DEGREE / 2.0
+# --- Spiral parameters from config ---
+spiral_config = config.get('spiral', {})
+SPIRAL_A = spiral_config.get('a', 30.0)
+SPIRAL_B = spiral_config.get('b', 35.0)
+SPIRAL_TURNS = spiral_config.get('turns', 2.0)
+SPIRAL_THETA_STEP = spiral_config.get('theta_step', 0.01)
+SPIRAL_THICKNESS = spiral_config.get('line_thickness', 30)
+SPIRAL_COLOR_BGR = tuple(spiral_config.get('color_bgr', [40, 220, 40]))
 
 print("\nSpiral parameters:")
-print(f"  Physical size: {SPIRAL_SIZE_M}m ({SPIRAL_SIZE_M*100}cm)")
-print(f"  Angular size: {ANGULAR_SIZE_DEG:.2f}°")
-print(f"  Screen radius: {SPIRAL_RADIUS_PX:.1f}px")
+print(f"  a: {SPIRAL_A}")
+print(f"  b: {SPIRAL_B}")
+print(f"  turns: {SPIRAL_TURNS}")
+print(f"  thickness: {SPIRAL_THICKNESS}px")
 
 # If your XREAL is the second monitor to the RIGHT of your main display,
 # set this to your main display width in pixels so the window opens there.
@@ -57,22 +67,19 @@ print(f"  Screen radius: {SPIRAL_RADIUS_PX:.1f}px")
 SECOND_MONITOR_X = 1920  # adjust or set to 0
 
 
-def generate_archimedean_spiral(num_points=SPIRAL_POINTS, num_coils=NUMBER_OF_COILS, max_radius=SPIRAL_RADIUS_PX):
+def generate_archimedean_spiral():
     """
-    Generate Archimedean spiral points.
-    Matches Unity's spiral generation: r = b * theta
+    Generate Archimedean spiral points using config parameters.
+    Uses formula: r = a + b*theta (matching the actual system)
 
     Returns:
         numpy array of (x, y) points relative to center (0, 0)
     """
-    theta_max = num_coils * 2.0 * np.pi
-    thetas = np.linspace(0, theta_max, num_points)
+    theta_max = 2.0 * np.pi * SPIRAL_TURNS
+    thetas = np.arange(0, theta_max + SPIRAL_THETA_STEP, SPIRAL_THETA_STEP, dtype=np.float32)
 
-    # Archimedean spiral: r = b * theta
-    # We want max radius at theta_max
-    b = max_radius / theta_max
-
-    radii = b * thetas
+    # Archimedean spiral: r = a + b * theta
+    radii = SPIRAL_A + SPIRAL_B * thetas
     xs = radii * np.cos(thetas)
     ys = radii * np.sin(thetas)
 
@@ -175,7 +182,7 @@ def main():
     print("="*70 + "\n")
 
     # Allow runtime adjustment of parameters
-    global DISPARITY_PX, SPIRAL_RADIUS_PX
+    global DISPARITY_PX, SPIRAL_B
 
     # Track whether to reverse disparity (in case our calculation is backwards)
     disparity_multiplier = 1.0
@@ -294,15 +301,15 @@ def main():
             else:
                 print("Disparity direction: REVERSED (L=left shift, R=right shift)")
         elif key == ord(']'):
-            # Increase spiral size
-            SPIRAL_RADIUS_PX += 10
+            # Increase spiral size (increase b parameter)
+            SPIRAL_B += 5
             spiral_points = generate_archimedean_spiral()
-            print(f"Spiral radius increased: {SPIRAL_RADIUS_PX:.1f}px")
+            print(f"Spiral B parameter increased: {SPIRAL_B:.1f}")
         elif key == ord('['):
-            # Decrease spiral size
-            SPIRAL_RADIUS_PX = max(50, SPIRAL_RADIUS_PX - 10)
+            # Decrease spiral size (decrease b parameter)
+            SPIRAL_B = max(10, SPIRAL_B - 5)
             spiral_points = generate_archimedean_spiral()
-            print(f"Spiral radius decreased: {SPIRAL_RADIUS_PX:.1f}px")
+            print(f"Spiral B parameter decreased: {SPIRAL_B:.1f}")
 
     cv.destroyAllWindows()
     print("\nExiting...")

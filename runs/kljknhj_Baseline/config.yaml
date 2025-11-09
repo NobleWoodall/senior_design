@@ -13,7 +13,7 @@ camera:
 spiral:
   a: 30.0
   b: 35.0
-  turns: 2
+  turns: 2.0
   theta_step: 0.01
   line_thickness: 30
   color_bgr:
@@ -54,7 +54,7 @@ tremor_analysis:
   band_high_hz: 10.0
 stereo_3d:
   target_depth_m: 0.5
-  disparity_offset_px: -600
+  disparity_offset_px: -700.0
   flip_x: false
   flip_y: false
   finger_scale_x: 0.75
@@ -66,10 +66,10 @@ calibration:
   num_traces: 2
   countdown_sec: 3
 session_metadata:
-  patient_id: fgfd
+  patient_id: kljknhj
   date: '2025-11-09'
-  clinician: fddf
-  notes: vdfvfd
+  clinician: jkhjbn
+  notes: ''
   trial_name: Baseline
   trial_order: 0
 show_live_preview: true

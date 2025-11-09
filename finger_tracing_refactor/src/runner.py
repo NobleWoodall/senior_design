@@ -445,12 +445,12 @@ class ExperimentRunner:
 
         intr = rsio.get_intrinsics()
 
-        # Create spiral for laptop display (no stereo)
+        # Create spiral for display
         spiral = Spiral3D(
             cfg.spiral.a, cfg.spiral.b,
             cfg.spiral.turns, cfg.spiral.theta_step,
-            target_depth_m=0.5,  # Doesn't matter for laptop, just needs to be non-zero
-            disparity_offset_px=0.0
+            target_depth_m=cfg.stereo_3d.target_depth_m,
+            disparity_offset_px=cfg.stereo_3d.disparity_offset_px
         )
 
         mp_tracker = MediaPipeTracker(cfg.mediapipe.model_complexity, cfg.mediapipe.detection_confidence,

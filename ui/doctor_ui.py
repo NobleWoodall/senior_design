@@ -727,6 +727,17 @@ class DoctorUI:
         countdown_entry.insert(0, str(config.get('dot_follow', {}).get('countdown_sec', 3)))
         countdown_entry.grid(row=1, column=1, padx=5)
 
+        # Stereo 3D Settings
+        stereo_frame = ttk.LabelFrame(scrollable_frame, text="Stereo 3D Settings", padding=15)
+        stereo_frame.pack(fill=tk.X, pady=10)
+
+        ttk.Label(stereo_frame, text="Disparity Offset (px):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        disparity_offset_entry = ttk.Entry(stereo_frame, width=15)
+        disparity_offset_entry.insert(0, str(config.get('stereo_3d', {}).get('disparity_offset_px', -500)))
+        disparity_offset_entry.grid(row=0, column=1, padx=5)
+
+        ttk.Label(stereo_frame, text="(Negative = closer, Positive = farther)", font=('Segoe UI', 8)).grid(row=0, column=2, sticky=tk.W, padx=5)
+
         # Calibration Section
         calibration_frame = ttk.LabelFrame(scrollable_frame, text="Calibration", padding=15)
         calibration_frame.pack(fill=tk.X, pady=10)
@@ -780,6 +791,10 @@ class DoctorUI:
                     config['dot_follow'] = {}
                 config['dot_follow']['dot_speed_sec_per_spiral'] = float(dot_speed_entry.get())
                 config['dot_follow']['countdown_sec'] = int(countdown_entry.get())
+
+                if 'stereo_3d' not in config:
+                    config['stereo_3d'] = {}
+                config['stereo_3d']['disparity_offset_px'] = float(disparity_offset_entry.get())
 
                 # Save to file
                 with open(config_path, 'w') as f:
