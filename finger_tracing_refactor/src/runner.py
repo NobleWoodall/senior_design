@@ -9,6 +9,7 @@ from enum import Enum
 
 from .config import AppConfig
 from .io_rs import RealSenseIO
+from .io_webcam import create_camera_io
 from .spiral_3d import Spiral3D
 from .track_mp import MediaPipeTracker
 from .track_led import LEDTracker
@@ -21,7 +22,7 @@ import sys
 import webbrowser
 from .calibration_utils import load_calibration, apply_calibration
 from .directional_analysis import analyze_directional_tremor
-from .session_manager import get_baseline_for_patient, calculate_improvements
+from .session_manager import calculate_improvements
 
 
 class TrialState(Enum):
@@ -33,14 +34,17 @@ class TrialState(Enum):
 
 class ExperimentRunner:
     # XReal glasses dimensions (3840x1080 side-by-side stereo)
-    FULL_WIDTH = 3840
-    FULL_HEIGHT = 1080
-    EYE_WIDTH = FULL_WIDTH // 2
-    EYE_HEIGHT = FULL_HEIGHT
+    # These will be set in __init__ based on use_stereo config
 
     def __init__(self, cfg:AppConfig):
         self.cfg = cfg
         self.calibration_matrix = None
+        
+        # Laptop display: 1920x1080 single screen
+        self.FULL_WIDTH = 1920
+        self.FULL_HEIGHT = 1080
+        self.EYE_WIDTH = 1920
+        self.EYE_HEIGHT = 1080
 
         # Load calibration if enabled
         if cfg.calibration.enabled:
@@ -110,7 +114,7 @@ class ExperimentRunner:
 
     def _run_single_trial(self, rsio:RealSenseIO, spiral:Spiral3D, saver:RunSaver,
                           method:str, tracker, depth_win:int, fps:int,
-                          metronome_bpm:int, show_live_preview:bool):
+                          show_live_preview:bool):
         # Trial state machine
         state = TrialState.COUNTDOWN
         countdown_start_time = None
@@ -428,7 +432,7 @@ class ExperimentRunner:
 
     def run_all(self):
         cfg = self.cfg
-        rsio = RealSenseIO(cfg.camera.width, cfg.camera.height, cfg.camera.fps,
+        rsio = create_camera_io(cfg.camera.width, cfg.camera.height, cfg.camera.fps,
                            cfg.camera.depth_width, cfg.camera.depth_height, cfg.camera.depth_fps,
                            cfg.camera.use_auto_exposure, cfg.camera.exposure)
         rsio.start()
@@ -441,12 +445,12 @@ class ExperimentRunner:
 
         intr = rsio.get_intrinsics()
 
-        # Create 3D stereo spiral
+        # Create spiral for laptop display (no stereo)
         spiral = Spiral3D(
             cfg.spiral.a, cfg.spiral.b,
             cfg.spiral.turns, cfg.spiral.theta_step,
-            target_depth_m=cfg.stereo_3d.target_depth_m,
-            disparity_offset_px=cfg.stereo_3d.disparity_offset_px
+            target_depth_m=0.5,  # Doesn't matter for laptop, just needs to be non-zero
+            disparity_offset_px=0.0
         )
 
         mp_tracker = MediaPipeTracker(cfg.mediapipe.model_complexity, cfg.mediapipe.detection_confidence,
@@ -468,17 +472,19 @@ class ExperimentRunner:
         try:
             for method in order:
                 for _ in range(trials):
-                    saver = RunSaver(base_out, method, spiral_id="stereo_3d")
+                    saver = RunSaver(base_out, method, spiral_id="stereo_3d",
+                                   patient_id=cfg.session_metadata.patient_id,
+                                   trial_name=cfg.session_metadata.trial_name)
                     saver.save_config_snapshot(asdict(cfg))
                     saver.save_intrinsics(intr)
                     if method == "mp":
                         summ, path = self._run_single_trial(rsio, spiral, saver, "mp", mp_tracker,
                                                             cfg.camera.depth_window, cfg.camera.fps,
-                                                            cfg.experiment.metronome_bpm, cfg.show_live_preview)
+                                                            cfg.show_live_preview)
                     elif method == "hsv":
                         summ, path = self._run_single_trial(rsio, spiral, saver, "hsv", hsv_tracker,
                                                             cfg.camera.depth_window, cfg.camera.fps,
-                                                            cfg.experiment.metronome_bpm, cfg.show_live_preview)
+                                                            cfg.show_live_preview)
                     else:
                         raise ValueError(f"Unknown method: {method}")
                     all_session_dirs[method].append(str(saver.run_dir))  # Store session directory
@@ -547,40 +553,9 @@ class ExperimentRunner:
             import traceback
             traceback.print_exc()
 
-        # Calculate improvements from baseline (if applicable)
+        # Note: Baseline comparison is now handled through the UI's case manager
+        # Use the comparison_generator.py to compare trials via the doctor_ui
         improvement_data = {}
-        try:
-            if cfg.session_metadata.session_type != 'baseline':
-                baseline_session = get_baseline_for_patient(
-                    cfg.experiment.output_dir,
-                    cfg.session_metadata.patient_id
-                )
-
-                if baseline_session:
-                    baseline_results_path = os.path.join(baseline_session['path'], 'results.json')
-                    if os.path.exists(baseline_results_path):
-                        with open(baseline_results_path, 'r') as f:
-                            baseline_results = json.load(f)
-
-                        # Create temporary current results for comparison
-                        temp_current = {
-                            "signal_analysis": signal_data,
-                            "directional_analysis": directional_data
-                        }
-
-                        for method in signal_data.keys():
-                            improvements = calculate_improvements(
-                                baseline_results,
-                                temp_current,
-                                method=method
-                            )
-                            improvement_data[method] = improvements
-
-                            summary = improvements.get('summary', {})
-                            reduction = summary.get('primary_metric_reduction_pct', 0)
-                            print(f"  {method}: {reduction:.1f}% tremor reduction from baseline")
-        except Exception as e:
-            print(f"Improvement calculation failed: {e}")
 
         # Consolidated results - dynamically include only methods that were run
         consolidated_results = {
@@ -600,6 +575,14 @@ class ExperimentRunner:
 
         with open(os.path.join(base_out, "results.json"), "w") as f:
             json.dump(consolidated_results, f, indent=2)
+        
+        # Also save to each trial directory for case manager
+        for method, session_dirs in all_session_dirs.items():
+            if session_dirs:
+                latest_session_dir = session_dirs[-1]
+                trial_results_path = os.path.join(latest_session_dir, 'results.json')
+                with open(trial_results_path, 'w') as f:
+                    json.dump(consolidated_results, f, indent=2)
 
         print("\n=== Results Summary ===")
         for m in all_summaries.keys():
@@ -615,7 +598,18 @@ class ExperimentRunner:
 
         # Generate HTML report and open in browser
         try:
-            results_json_path = os.path.join(base_out, "results.json")
+            # Use trial directory results.json
+            latest_session_dir = None
+            for method, session_dirs in all_session_dirs.items():
+                if session_dirs:
+                    latest_session_dir = session_dirs[-1]
+                    break
+            
+            if latest_session_dir:
+                results_json_path = os.path.join(latest_session_dir, "results.json")
+            else:
+                results_json_path = os.path.join(base_out, "results.json")
+            
             html_path = generate_html_report(results_json_path)
 
             print(f"\n=== HTML Report Generated ===")

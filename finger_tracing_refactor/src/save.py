@@ -3,9 +3,11 @@ from pathlib import Path
 from typing import Dict, Any
 
 class RunSaver:
-    def __init__(self, base_dir:str, method:str, spiral_id:str):
-        ts = __import__('time').strftime("%Y%m%d_%H%M%S")
-        self.run_dir = Path(base_dir) / f"{ts}_method-{method}_spiral-{spiral_id}"
+    def __init__(self, base_dir:str, method:str, spiral_id:str, patient_id:str = "ANON", trial_name:str = "Unknown"):
+        # Create readable folder name: PatientName_TrialName
+        safe_patient = patient_id.replace(' ', '_').replace('/', '_')
+        safe_trial = trial_name.replace(' ', '_').replace('/', '_')
+        self.run_dir = Path(base_dir) / f"{safe_patient}_{safe_trial}"
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.frames_path = self.run_dir / "frames.csv"
         self.preview_path = self.run_dir / "preview.mp4"

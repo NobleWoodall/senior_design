@@ -66,10 +66,10 @@ calibration:
   num_traces: 2
   countdown_sec: 3
 session_metadata:
-  patient_id: Andrew
-  date: 'November 7, 2025'
-  clinician: 'Andrew Toader'
-  notes: 'Patient wants to have weaker tremors'
+  patient_id: fgfd
+  date: '2025-11-09'
+  clinician: fddf
+  notes: vdfvfd
   trial_name: Baseline
   trial_order: 0
 show_live_preview: true

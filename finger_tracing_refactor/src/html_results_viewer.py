@@ -611,7 +611,8 @@ def create_directional_chart(directional_analysis, method):
                     tickfont: {{ color: '#b0b0b0' }}
                 }},
                 angularaxis: {{
-                    direction: 'clockwise',
+                    direction: 'counterclockwise',
+                    rotation: 0,
                     gridcolor: '#424242',
                     tickfont: {{ color: '#b0b0b0' }}
                 }},

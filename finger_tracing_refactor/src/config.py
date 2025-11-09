@@ -6,11 +6,11 @@ import time
 class SessionMetadata:
     """Metadata for clinical session tracking (MRgFUS)"""
     patient_id: str = "ANON"
-    session_type: str = "baseline"  # baseline, post_sonication, follow_up
-    sonication_number: int = 0
     date: str = field(default_factory=lambda: time.strftime("%Y-%m-%d"))
     clinician: str = ""
     notes: str = ""
+    trial_name: str = "Baseline"  # Custom trial name (e.g., "Preop", "Intraop 1", "Postop")
+    trial_order: int = 0  # Sorting order for trials (0=baseline, 1=preop, 2=intraop1, etc.)
 
 @dataclass
 class CameraCfg:
@@ -34,8 +34,6 @@ class SpiralCfg:
     theta_step:float=0.01
     line_thickness:int=3
     color_bgr:Tuple[int,int,int]=(40,220,40)
-    start_radius_px:int=18
-    end_radius_px:int=18
 
 @dataclass
 class DotFollowCfg:
@@ -53,17 +51,6 @@ class MPcfg:
     tracking_confidence:float=0.9
 
 @dataclass
-class ColorCfg:
-    hsv_low:Tuple[int,int,int]=(35,60,60)
-    hsv_high:Tuple[int,int,int]=(85,255,255)
-    morph_kernel:int=3
-    min_area:int=60
-    use_flow_fallback:bool=True
-    flow_win:int=15
-    flow_max_level:int=2
-    use_depth_filter:bool=True
-
-@dataclass
 class LEDCfg:
     hsv_low:Tuple[int,int,int]=(0,60,160)
     hsv_high:Tuple[int,int,int]=(110,255,255)
@@ -74,10 +61,8 @@ class LEDCfg:
 @dataclass
 class ExperimentCfg:
     methods_order:List[str]=field(default_factory=lambda:["mp","hsv"])
-    trials_per_method:int=1
     save_preview:bool=False
     output_dir:str="runs"
-    metronome_bpm:int=0
     max_jump_px:int=60
 
 @dataclass
@@ -108,7 +93,6 @@ class AppConfig:
     spiral:SpiralCfg=field(default_factory=SpiralCfg)
     dot_follow:DotFollowCfg=field(default_factory=DotFollowCfg)
     mediapipe:MPcfg=field(default_factory=MPcfg)
-    color:ColorCfg=field(default_factory=ColorCfg)
     led:LEDCfg=field(default_factory=LEDCfg)
     experiment:ExperimentCfg=field(default_factory=ExperimentCfg)
     tremor_analysis:TremorAnalysisCfg=field(default_factory=TremorAnalysisCfg)
@@ -124,7 +108,6 @@ class AppConfig:
             spiral=SpiralCfg(**d.get("spiral",{})),
             dot_follow=DotFollowCfg(**d.get("dot_follow",{})),
             mediapipe=MPcfg(**d.get("mediapipe",{})),
-            color=ColorCfg(**d.get("color",{})),
             led=LEDCfg(**d.get("led",{})),
             experiment=ExperimentCfg(**d.get("experiment",{})),
             tremor_analysis=TremorAnalysisCfg(**d.get("tremor_analysis",{})),

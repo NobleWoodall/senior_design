@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MRgFUS Tremor Assessment - Clinical Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1565C0 0%, #0D47A1 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 12px;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .header-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 40px;
+            margin-top: 20px;
+        }
+
+        .patient-info {
+            flex: 1;
+        }
+
+        .patient-info p {
+            font-size: 1.1em;
+            margin: 8px 0;
+            opacity: 0.95;
+        }
+
+        .key-metrics {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 300px;
+        }
+
+        .key-metrics h3 {
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: rgba(255,255,255,0.8);
+        }
+
+        .metric-value {
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .assessment {
+            background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+            color: white;
+            padding: 24px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .assessment.warning {
+            background: linear-gradient(135deg, #F57C00 0%, #E65100 100%);
+        }
+
+        .assessment.alert {
+            background: linear-gradient(135deg, #C62828 0%, #B71C1C 100%);
+        }
+
+        .assessment h2 {
+            margin-bottom: 12px;
+            font-size: 1.8em;
+        }
+
+        .assessment p {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 600px;
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .chart-title {
+            font-size: 1.5em;
+            margin-bottom: 16px;
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .metric-card {
+            background: #2d2d2d;
+            padding: 24px;
+            border-radius: 8px;
+        }
+
+        .metric-card h3 {
+            color: #42A5F5;
+            margin-bottom: 16px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #42A5F5;
+            padding-bottom: 8px;
+        }
+
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #424242;
+        }
+
+        .metric-item:last-child {
+            border-bottom: none;
+        }
+
+        .metric-item-label {
+            color: #b0b0b0;
+        }
+
+        .metric-item-value {
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        @media (max-width: 768px) {
+            .header-info {
+                flex-direction: column;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-container {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+    <div class="header">
+        <h1>TREMOR ASSESSMENT</h1>
+        <div class="header-info">
+            <div class="patient-info">
+                <p><strong>Patient:</strong> Andrew</p>
+                <p><strong>Session:</strong> BASELINE SESSION</p>
+                <p><strong>Date:</strong> 2025-11-08</p>
+            </div>
+            <div class="key-metrics">
+                <h3>KEY MEASUREMENTS</h3>
+                <div class="metric-row">
+                    <span class="metric-label">Tremor Band RMS</span>
+                    <span class="metric-value">2.22 px</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Peak Frequency</span>
+                    <span class="metric-value">6.28 Hz</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Overall RMS</span>
+                    <span class="metric-value">37.53 px</span>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    
+
+        
+
+        <div class="card">
+            <h2 class="chart-title">360° DIRECTIONAL TREMOR ANALYSIS</h2>
+            <div id="directional-chart" class="chart-container"></div>
+        </div>
+
+        <div class="card">
+            <h2 class="chart-title">TREMOR BAND FREQUENCY ANALYSIS (4-10 Hz)</h2>
+            <div id="frequency-chart" class="chart-container"></div>
+        </div>
+
+        <div class="card">
+            <h2 class="chart-title">FINGER TRACE PATH</h2>
+            <div id="path-chart" class="chart-container"></div>
+        </div>
+
+        <div class="metrics-grid">
+            
+    <div class="metric-card">
+        <h3>SIGNAL ANALYSIS DETAILS</h3>
+        <div class="metric-item">
+            <span class="metric-item-label">Tremor Band Power</span>
+            <span class="metric-item-value">1.7593</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Tremor Band Range</span>
+            <span class="metric-item-value">4.0 - 10.0 Hz</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Resampled Length</span>
+            <span class="metric-item-value">595 samples</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Sampling Rate</span>
+            <span class="metric-item-value">30.0 Hz</span>
+        </div>
+    </div>
+    
+            
+    <div class="metric-card">
+        <h3>TRACKING PERFORMANCE</h3>
+        <div class="metric-item">
+            <span class="metric-item-label">Duration</span>
+            <span class="metric-item-value">19.86 sec</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Total Frames</span>
+            <span class="metric-item-value">321</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Average FPS</span>
+            <span class="metric-item-value">16.16</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Tracking Loss Rate</span>
+            <span class="metric-item-value">0.0%</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Mean Error</span>
+            <span class="metric-item-value">61.99 px</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">Median Error</span>
+            <span class="metric-item-value">39.05 px</span>
+        </div>
+        <div class="metric-item">
+            <span class="metric-item-label">95th Percentile</span>
+            <span class="metric-item-value">261.34 px</span>
+        </div>
+    </div>
+    
+        </div>
+    </div>
+
+    <script>
+        // Plotly chart configurations
+        const darkLayout = {
+            paper_bgcolor: '#2d2d2d',
+            plot_bgcolor: '#2d2d2d',
+            font: { color: '#e0e0e0' },
+            xaxis: { gridcolor: '#424242', zerolinecolor: '#424242' },
+            yaxis: { gridcolor: '#424242', zerolinecolor: '#424242' }
+        };
+
+        // Frequency chart
+        
+        const freqData = {
+            x: [4.0540540540540535, 4.256756756756756, 4.459459459459459, 4.662162162162161, 4.864864864864865, 5.0675675675675675, 5.27027027027027, 5.472972972972973, 5.675675675675675, 5.878378378378378, 6.081081081081081, 6.283783783783783, 6.486486486486486, 6.689189189189189, 6.891891891891891, 7.094594594594594, 7.2972972972972965, 7.499999999999999, 7.702702702702702, 7.905405405405404, 8.108108108108107, 8.31081081081081, 8.513513513513512, 8.716216216216216, 8.918918918918918, 9.121621621621621, 9.324324324324323, 9.527027027027026, 9.72972972972973, 9.932432432432432],
+            y: [0.3973925152029614, 0.4000934697206627, 0.4559878363902073, 0.5619395395832731, 0.4623454675853433, 0.49999726499557484, 0.3844307775822728, 0.4921793304265411, 0.45474485588270414, 0.43842564582846644, 0.4403529429398664, 0.6229073701824757, 0.22689819884866433, 0.15528564752232898, 0.2651760789338469, 0.10027810520290152, 0.3534465249235224, 0.40286369914142767, 0.41853411103538696, 0.14762270825676646, 0.04379208044162324, 0.10017247987460186, 0.15079629228041683, 0.1343326327218581, 0.19422172487801964, 0.19692313829064476, 0.0985379661422409, 0.10389869139129079, 0.09452322070867865, 0.15993552615972792],
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#42A5F5', width: 3 },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(66, 165, 245, 0.3)',
+            name: 'Tremor Band PSD (4-10 Hz)'
+        };
+
+        const peakLine = {
+            x: [6.283783783783783, 6.283783783783783],
+            y: [0, 0.6229073701824757],
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: { color: '#EF5350', width: 2, dash: 'dash' },
+            marker: { size: 10, symbol: 'diamond' },
+            name: 'Peak Tremor: 6.28 Hz'
+        };
+
+        const freqLayout = {
+            ...darkLayout,
+            xaxis: {
+                title: 'Frequency (Hz)',
+                gridcolor: '#424242',
+                range: [4, 10]  // Lock to tremor band
+            },
+            yaxis: {
+                title: 'Power Spectral Density (Tremor Band)',
+                gridcolor: '#424242'
+            },
+            showlegend: true,
+            legend: {
+                x: 1,
+                xanchor: 'right',
+                y: 1,
+                bgcolor: 'rgba(45,45,45,0.8)'
+            },
+            margin: { l: 60, r: 40, t: 20, b: 60 }
+        };
+
+        Plotly.newPlot('frequency-chart', [freqData, peakLine], freqLayout, {responsive: true});
+    
+
+        // Directional chart
+        
+        const dirData = {
+            r: [5587.548238182139, 4632.277732391373, 4586.401978355603, 4229.3682330637685, 3245.223787269302, 3979.0029202228334, 3256.031365839187, 1947.653096515554, 1831.3782311033247, 2020.7382484361233, 1355.541375614779, 1214.720738628642, 2003.3288953783263, 1890.713890134803, 4348.531564950218, 2304.3647468283084, 3334.2280653943317, 4822.816681897632, 5815.692774321389, 5274.078414053933, 4215.779663002069, 2892.7525250855288, 3018.749958329937, 3256.405699186272, 2983.1654206216995, 2207.685030523757, 1769.550210881335, 1009.9841628859008, 1548.6241502114685, 2521.376609155702, 1175.2264275140658, 2162.6167593959685, 2253.7558906282184, 3226.2056880374034, 4586.777324142459, 3875.974710672544],
+            theta: [5.0, 15.0, 25.0, 35.0, 45.0, 55.0, 65.0, 75.0, 85.0, 95.0, 105.0, 115.0, 125.0, 135.0, 145.0, 155.0, 165.0, 175.0, 185.0, 195.0, 205.0, 215.0, 225.0, 235.0, 245.0, 255.0, 265.0, 275.0, 285.0, 295.0, 305.0, 315.0, 325.0, 335.0, 345.0, 355.0],
+            type: 'barpolar',
+            marker: {
+                color: ["#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#EF5350", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#66BB6A", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5", "#42A5F5"],
+                line: { color: '#2d2d2d', width: 1 }
+            },
+            opacity: 0.8
+        };
+
+        const dirLayout = {
+            ...darkLayout,
+            polar: {
+                radialaxis: {
+                    visible: true,
+                    gridcolor: '#424242',
+                    tickfont: { color: '#b0b0b0' }
+                },
+                angularaxis: {
+                    direction: 'clockwise',
+                    rotation: 90,
+                    gridcolor: '#424242',
+                    tickfont: { color: '#b0b0b0' }
+                },
+                bgcolor: '#2d2d2d'
+            },
+            showlegend: false,
+            margin: { l: 80, r: 80, t: 40, b: 80 }
+        };
+
+        Plotly.newPlot('directional-chart', [dirData], dirLayout, {responsive: true});
+    
+
+        // Path chart
+        
+            // Finger tracking path with time gradient
+            const pathData = {
+                x: [1337.94, 1332.67, 1335.93, 1439.05, 1561.81, 1560.96, 1637.79, 1631.38, 1646.48, 1590.49, 1591.19, 1584.01, 1524.17, 1519.08, 1441.25, 1363.97, 1363.09, 1363.62, 1297.81, 1295.36, 1296.4, 1227.98, 1225.28, 1169.9, 1134.47, 1135.16, 1137.09, 1100.99, 1103.74, 1073.82, 1048.2, 1044.21, 1025.76, 1012.34, 1010.61, 999.88, 971.32, 970.16, 967.8, 948.35, 938.92, 938.26, 931.78, 929.6, 922.49, 906.44, 910.13, 893.93, 882.8, 885.43, 883.37, 873.89, 873.17, 859.45, 852.64, 853.92, 850.19, 848.69, 850.29, 849.52, 844.49, 841.16, 842.44, 841.55, 844.77, 842.03, 845.34, 845.64, 840.66, 832.11, 833.64, 828.15, 832.41, 832.49, 826.7, 822.15, 825.73, 816.63, 808.48, 812.37, 807.36, 800.9, 799.77, 800.83, 791.01, 784.27, 783.33, 775.66, 777.7, 768.38, 767.33, 767.77, 752.21, 748.17, 748.34, 752.13, 759.78, 761.74, 765.19, 774.38, 775.44, 786.04, 822.52, 814.4, 847.33, 842.63, 844.78, 841.58, 832.87, 832.2, 833.85, 844.71, 844.49, 853.23, 875.5, 873.59, 894.61, 922.97, 922.3, 938.93, 961.11, 958.11, 976.39, 996.72, 996.84, 1012.58, 1032.95, 1034.46, 1034.89, 1054.37, 1057.22, 1085.17, 1110.02, 1108.43, 1136.25, 1160.21, 1157.92, 1175.91, 1187.27, 1188.03, 1192.44, 1190.26, 1190.86, 1191.33, 1193.59, 1194.98, 1196.74, 1197.76, 1197.45, 1193.92, 1188.34, 1192.36, 1190.28, 1199.14, 1198.51, 1208.55, 1210.45, 1210.88, 1216.68, 1224.34, 1225.2, 1231.68, 1239.39, 1240.55, 1242.55, 1247.56, 1247.64, 1250.37, 1256.55, 1259.34, 1263.48, 1270.52, 1271.28, 1267.6, 1260.97, 1265.08, 1259.31, 1250.72, 1251.43, 1234.8, 1224.41, 1225.41, 1208.43, 1197.31, 1194.75, 1195.48, 1183.38, 1172.13, 1167.03, 1155.6, 1154.15, 1133.84, 1112.4, 1111.88, 1087.56, 1045.35, 1043.88, 1041.48, 1009.61, 987.76, 987.72, 967.07, 972.95, 946.79, 921.71, 928.08, 890.19, 857.07, 864.17, 845.03, 827.36, 823.61, 807.28, 788.7, 785.64, 774.04, 758.46, 758.65, 746.58, 733.7, 733.77, 732.77, 715.94, 698.07, 701.05, 684.21, 683.52, 669.72, 656.77, 660.06, 637.24, 621.71, 623.59, 616.26, 595.5, 600.77, 579.21, 572.04, 570.65, 558.69, 544.43, 550.32, 541.58, 550.58, 550.77, 557.2, 547.58, 545.07, 540.36, 533.69, 533.06, 524.97, 512.12, 509.81, 492.42, 482.72, 484.57, 482.46, 506.46, 507.81, 533.78, 563.22, 567.04, 592.8, 627.0, 632.95, 652.39, 681.19, 690.28, 722.96, 742.39, 750.74, 773.64, 808.01, 810.68, 829.46, 848.73, 849.06, 866.29, 898.24, 896.72, 937.99, 997.04, 988.98, 1021.49, 1065.97, 1060.6, 1103.72, 1143.27, 1138.95, 1178.4, 1217.65, 1212.27, 1257.12, 1302.3, 1299.56, 1338.06, 1379.25, 1374.11, 1418.09, 1448.79, 1440.08, 1468.3, 1488.23, 1483.51, 1493.98, 1503.37, 1502.44, 1517.09, 1534.56, 1537.17, 1554.44, 1572.68, 1572.29, 1591.4, 1600.61, 1599.96, 1598.82, 1614.44, 1611.68, 1625.7],
+                y: [619.49, 628.44, 627.84, 648.2, 693.04, 696.99, 725.47, 727.87, 700.18, 638.61, 636.29, 637.4, 628.0, 624.94, 609.28, 602.28, 597.42, 597.44, 599.18, 594.49, 592.4, 625.02, 629.52, 635.43, 624.91, 629.03, 628.93, 620.21, 626.19, 625.58, 631.34, 629.77, 614.88, 610.11, 613.22, 616.83, 620.69, 620.62, 618.35, 616.25, 624.54, 624.44, 634.83, 634.93, 639.33, 634.18, 632.42, 628.33, 626.07, 625.17, 628.83, 627.29, 624.4, 625.07, 628.75, 629.81, 635.2, 636.35, 637.11, 636.77, 632.57, 627.96, 627.83, 624.29, 625.53, 627.44, 615.8, 621.4, 607.11, 604.41, 605.17, 600.99, 596.81, 596.69, 585.46, 573.62, 572.25, 552.77, 547.11, 548.37, 541.89, 539.82, 536.95, 536.65, 531.27, 528.25, 527.23, 519.66, 519.65, 509.58, 505.16, 500.41, 489.47, 482.65, 482.56, 471.1, 463.05, 466.39, 455.9, 447.87, 450.45, 438.77, 430.03, 431.82, 423.72, 420.38, 422.07, 416.89, 411.73, 408.75, 405.63, 399.14, 403.98, 398.2, 397.02, 397.24, 394.14, 394.44, 392.12, 386.07, 378.78, 380.98, 369.03, 359.48, 358.24, 354.01, 351.93, 352.32, 351.79, 345.8, 348.13, 344.15, 349.45, 351.22, 356.89, 364.23, 366.44, 373.9, 380.37, 384.4, 388.82, 389.96, 388.81, 395.51, 405.05, 408.3, 409.49, 419.69, 420.58, 428.1, 440.9, 441.28, 449.66, 457.63, 459.63, 471.3, 486.12, 486.91, 496.13, 506.9, 506.16, 518.2, 529.63, 531.61, 545.51, 559.71, 561.06, 572.75, 590.35, 587.97, 606.9, 622.78, 621.49, 635.22, 650.13, 652.97, 668.7, 682.69, 684.44, 696.65, 713.45, 720.26, 734.23, 746.23, 752.68, 753.31, 761.37, 778.61, 783.94, 798.52, 800.85, 824.47, 850.56, 852.22, 870.52, 872.0, 875.32, 880.14, 875.25, 869.37, 874.17, 871.14, 872.91, 875.33, 879.09, 871.6, 871.12, 872.87, 869.15, 865.0, 855.88, 849.79, 847.67, 838.01, 836.44, 835.55, 817.83, 813.9, 807.32, 788.43, 789.26, 789.3, 776.6, 760.05, 761.48, 741.09, 741.34, 724.52, 702.61, 701.39, 674.38, 651.41, 655.59, 640.46, 621.86, 617.07, 610.2, 596.48, 591.16, 567.9, 542.67, 547.58, 520.73, 506.54, 507.19, 494.17, 485.08, 483.67, 474.61, 455.66, 458.49, 438.57, 412.5, 417.09, 387.46, 369.67, 375.19, 357.84, 345.89, 334.73, 320.71, 293.07, 286.12, 273.08, 252.2, 245.01, 236.61, 224.52, 217.08, 207.15, 183.52, 184.54, 170.0, 156.92, 152.58, 137.82, 121.25, 120.37, 110.02, 90.47, 89.6, 81.26, 80.27, 79.67, 83.46, 98.6, 94.32, 117.54, 125.11, 121.8, 148.08, 158.63, 156.53, 173.36, 184.04, 185.63, 200.49, 226.38, 226.89, 251.26, 283.76, 284.5, 324.46, 366.3, 363.37, 398.71, 415.12, 415.51, 444.83, 470.67, 469.29, 491.94, 517.7, 513.22, 540.77, 569.89, 576.21, 574.74, 595.45, 598.1, 611.76],
+                mode: 'markers+lines',
+                type: 'scatter',
+                marker: {
+                    size: 6,
+                    color: Array.from({length: 321}, (_, i) => i),
+                    colorscale: 'Plasma',
+                    showscale: true,
+                    colorbar: {
+                        title: 'Time',
+                        titleside: 'right',
+                        tickfont: { color: '#b0b0b0' },
+                        titlefont: { color: '#ffffff' }
+                    }
+                },
+                line: {
+                    color: '#42A5F5',
+                    width: 1.5,
+                    opacity: 0.4
+                },
+                name: 'Finger Trace'
+            };
+
+            const startPoint = {
+                x: [1337.94],
+                y: [619.49],
+                mode: 'markers',
+                type: 'scatter',
+                marker: {
+                    size: 15,
+                    color: '#66BB6A',
+                    symbol: 'circle',
+                    line: { color: 'white', width: 2 }
+                },
+                name: 'Start'
+            };
+
+            const endPoint = {
+                x: [1625.7],
+                y: [611.76],
+                mode: 'markers',
+                type: 'scatter',
+                marker: {
+                    size: 15,
+                    color: '#EF5350',
+                    symbol: 'triangle-up',
+                    line: { color: 'white', width: 2 }
+                },
+                name: 'End'
+            };
+
+            const pathLayout = {
+                ...darkLayout,
+                xaxis: {
+                    title: 'X Position (pixels)',
+                    gridcolor: '#424242',
+                    scaleanchor: 'y'
+                },
+                yaxis: {
+                    title: 'Y Position (pixels)',
+                    gridcolor: '#424242'
+                },
+                showlegend: true,
+                legend: {
+                    x: 1,
+                    xanchor: 'right',
+                    y: 1,
+                    bgcolor: 'rgba(45,45,45,0.8)'
+                },
+                margin: { l: 60, r: 40, t: 20, b: 60 }
+            };
+
+            Plotly.newPlot('path-chart', [pathData, startPoint, endPoint], pathLayout, {responsive: true});
+        
+    </script>
+</body>
+</html>
