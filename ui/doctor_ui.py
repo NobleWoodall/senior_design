@@ -752,9 +752,15 @@ class DoctorUI:
             )
             if confirm:
                 try:
-                    # Run calibration
+                    # Determine tracking method
+                    tracking_method = config.get('experiment', {}).get('methods_order', ['mp'])[0]
+
+                    # Run calibration with proper arguments
                     result = subprocess.run([
-                        sys.executable, '-m', 'finger_tracing_refactor.calibrate_main'
+                        sys.executable,
+                        'finger_tracing_refactor/calibrate_main.py',
+                        '--config', 'config.yaml',
+                        '--method', tracking_method
                     ], cwd=os.getcwd())
 
                     if result.returncode == 0:
