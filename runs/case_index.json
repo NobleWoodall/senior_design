@@ -44,108 +44,50 @@
       ],
       "num_trials": 4
     },
-    "ds": {
-      "patient_id": "ds",
-      "clinician": "dsf",
-      "created_date": "2025-11-08",
+    "Colton": {
+      "patient_id": "Colton",
+      "clinician": "",
+      "created_date": "2025-11-10",
       "trials": [
         {
           "trial_name": "Baseline",
           "trial_order": 0,
-          "session_path": "runs\\ds_Baseline",
-          "timestamp": "1762645162",
-          "date": "2025-11-08",
+          "session_path": "runs\\Colton_Baseline",
+          "timestamp": "1762795889",
+          "date": "2025-11-10",
           "session_type": "",
-          "clinician": "dsf"
-        }
-      ],
-      "num_trials": 1
-    },
-    "kljknhj": {
-      "patient_id": "kljknhj",
-      "clinician": "jkhjbn",
-      "created_date": "2025-11-09",
-      "trials": [
+          "clinician": ""
+        },
         {
-          "trial_name": "Baseline",
-          "trial_order": 0,
-          "session_path": "runs\\kljknhj_Baseline",
-          "timestamp": "1762718858",
-          "date": "2025-11-09",
+          "trial_name": "Intraop 1",
+          "trial_order": 2,
+          "session_path": "runs\\Colton_Intraop_1",
+          "timestamp": "1762795940",
+          "date": "2025-11-10",
           "session_type": "",
-          "clinician": "jkhjbn"
-        }
-      ],
-      "num_trials": 1
-    },
-    "lnjkjn": {
-      "patient_id": "lnjkjn",
-      "clinician": "jkn",
-      "created_date": "2025-11-09",
-      "trials": [
+          "clinician": ""
+        },
         {
-          "trial_name": "Baseline",
-          "trial_order": 0,
-          "session_path": "runs\\lnjkjn_Baseline",
-          "timestamp": "1762719751",
-          "date": "2025-11-09",
+          "trial_name": "Intraop 2",
+          "trial_order": 3,
+          "session_path": "runs\\Colton_Intraop_2",
+          "timestamp": "1762795988",
+          "date": "2025-11-10",
           "session_type": "",
-          "clinician": "jkn"
-        }
-      ],
-      "num_trials": 1
-    },
-    "mnnn": {
-      "patient_id": "mnnn",
-      "clinician": "nn",
-      "created_date": "2025-11-09",
-      "trials": [
+          "clinician": ""
+        },
         {
-          "trial_name": "Baseline",
-          "trial_order": 0,
-          "session_path": "runs\\mnnn_Baseline",
-          "timestamp": "1762717870",
-          "date": "2025-11-09",
+          "trial_name": "Postop",
+          "trial_order": 5,
+          "session_path": "runs\\Colton_Postop",
+          "timestamp": "1762796030",
+          "date": "2025-11-10",
           "session_type": "",
-          "clinician": "nn"
+          "clinician": ""
         }
       ],
-      "num_trials": 1
-    },
-    "nmbnb": {
-      "patient_id": "nmbnb",
-      "clinician": "mnnb",
-      "created_date": "2025-11-09",
-      "trials": [
-        {
-          "trial_name": "Baseline",
-          "trial_order": 0,
-          "session_path": "runs\\nmbnb_Baseline",
-          "timestamp": "1762718961",
-          "date": "2025-11-09",
-          "session_type": "",
-          "clinician": "mnnb"
-        }
-      ],
-      "num_trials": 1
-    },
-    "nnmn mn": {
-      "patient_id": "nnmn mn",
-      "clinician": "kjnkjnknj",
-      "created_date": "2025-11-09",
-      "trials": [
-        {
-          "trial_name": "Baseline",
-          "trial_order": 0,
-          "session_path": "runs\\nnmn_mn_Baseline",
-          "timestamp": "1762718716",
-          "date": "2025-11-09",
-          "session_type": "",
-          "clinician": "kjnkjnknj"
-        }
-      ],
-      "num_trials": 1
+      "num_trials": 4
     }
   },
-  "last_updated": "2025-11-09 15:24:33"
+  "last_updated": "2025-11-10 12:38:04"
 }
